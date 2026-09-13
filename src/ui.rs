@@ -43,6 +43,7 @@ struct FlashseekApp {
     hits: Vec<Hit>,
     selected: Option<usize>,
     last_query: String,
+    focus_search: bool,
 }
 
 impl Default for FlashseekApp {
@@ -59,6 +60,7 @@ impl Default for FlashseekApp {
             hits: Vec::new(),
             selected: None,
             last_query: String::new(),
+            focus_search: true,
         }
     }
 }
@@ -137,6 +139,9 @@ impl eframe::App for FlashseekApp {
         if ctx.input(|i| i.key_pressed(egui::Key::F5)) {
             self.reindex();
         }
+        if ctx.input(|i| i.key_pressed(egui::Key::L) && i.modifiers.ctrl) {
+            self.focus_search = true;
+        }
         if ctx.input(|i| i.key_pressed(egui::Key::C) && i.modifiers.ctrl) {
             if let Some(i) = self.selected.or(Some(0)) {
                 if let Some(hit) = self.hits.get(i) {
@@ -181,11 +186,17 @@ impl eframe::App for FlashseekApp {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 ui.label("Search");
-                let resp = ui.add(
-                    egui::TextEdit::singleline(&mut self.query)
-                        .desired_width(f32::INFINITY)
-                        .hint_text("지난주 세금 pdf   or   invoice ext:pdf"),
-                );
+                let mut te = egui::TextEdit::singleline(&mut self.query)
+                    .desired_width(f32::INFINITY)
+                    .hint_text("지난주 세금 pdf   or   invoice ext:pdf");
+                if self.focus_search {
+                    te = te.id(egui::Id::new("flashseek-search"));
+                }
+                let resp = ui.add(te);
+                if self.focus_search {
+                    resp.request_focus();
+                    self.focus_search = false;
+                }
                 if resp.changed() {
                     self.refresh();
                 }
