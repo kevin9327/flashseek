@@ -7,6 +7,8 @@ use crate::types::Snippet;
 #[derive(Debug, Default, Clone)]
 pub struct ContentIndex {
     bodies: HashMap<PathBuf, String>,
+    /// Lowercased word → paths. Substring search still uses `body()`.
+    postings: HashMap<String, Vec<PathBuf>>,
 }
 
 impl ContentIndex {
@@ -15,11 +17,31 @@ impl ContentIndex {
     }
 
     pub fn index(&mut self, path: PathBuf, body: String) {
+        self.remove(&path);
+        for word in tokenize_words(&body) {
+            let e = self.postings.entry(word).or_default();
+            if !e.iter().any(|p| p == &path) {
+                e.push(path.clone());
+            }
+        }
         self.bodies.insert(path, body);
     }
 
     pub fn remove(&mut self, path: &Path) {
-        self.bodies.remove(path);
+        if let Some(body) = self.bodies.remove(path) {
+            for word in tokenize_words(&body) {
+                if let Some(v) = self.postings.get_mut(&word) {
+                    v.retain(|p| p != path);
+                }
+            }
+        }
+    }
+
+    pub fn paths_for_word(&self, word: &str) -> &[PathBuf] {
+        self.postings
+            .get(&word.to_lowercase())
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
     }
 
     pub fn body(&self, path: &Path) -> Option<&str> {
@@ -37,6 +59,22 @@ impl ContentIndex {
         let body = self.body(path)?;
         make_snippet(body, terms, 80)
     }
+}
+
+pub fn tokenize_words(body: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut cur = String::new();
+    for c in body.chars() {
+        if c.is_alphanumeric() || ('\u{AC00}'..='\u{D7A3}').contains(&c) {
+            cur.push(c.to_lowercase().next().unwrap_or(c));
+        } else if !cur.is_empty() {
+            words.push(std::mem::take(&mut cur));
+        }
+    }
+    if !cur.is_empty() {
+        words.push(cur);
+    }
+    words
 }
 
 pub fn make_snippet(body: &str, terms: &[String], ctx: usize) -> Option<Snippet> {
@@ -99,5 +137,16 @@ mod tests {
         assert!(!s.highlights.is_empty());
         let (a, b) = s.highlights[0];
         assert_eq!(&s.text[a..b], "세금");
+    }
+
+    #[test]
+    fn inverted_index_tracks_words_and_removes() {
+        let mut idx = ContentIndex::new();
+        let p = PathBuf::from("C:\\docs\\a.txt");
+        idx.index(p.clone(), "alpha 세금 omega".into());
+        assert!(idx.paths_for_word("세금").contains(&p));
+        assert!(idx.paths_for_word("alpha").contains(&p));
+        idx.remove(&p);
+        assert!(idx.paths_for_word("세금").is_empty());
     }
 }
