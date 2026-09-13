@@ -203,7 +203,7 @@ impl Query {
 }
 
 /// Everything-class operators: space=AND, `|=OR`, `!=NOT`, `*`/`?`,
-/// `ext:`/`type:`, `pic:`/`video:`/`audio:` (set extension lists), `size:`,
+/// `ext:`/`type:`, `pic:`/`video:`/`audio:`/`zip:` (set extension lists), `size:`,
 /// `empty:`/`empty:yes` (size == 0), `len:`, `depth:`, `dm:`/`datemodified:`/`modified:`,
 /// `n:`/`name:`, `file:`, `folder:`, `case:`,
 /// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`, `parent:`, `path:`,
@@ -379,6 +379,8 @@ fn strip_ext_macro(t: &str) -> Option<&'static str> {
         Some("mp4;mkv;avi;webm;mov")
     } else if strip_prefix_ci(t, "audio:").is_some() {
         Some("mp3;wav;flac;aac;ogg")
+    } else if strip_prefix_ci(t, "zip:").is_some() {
+        Some("zip;7z;rar;tar;gz;tgz;bz2")
     } else {
         None
     }
@@ -432,6 +434,7 @@ fn is_filter(t: &str) -> bool {
         || l.starts_with("pic:")
         || l.starts_with("video:")
         || l.starts_with("audio:")
+        || l.starts_with("zip:")
         || l.starts_with("size:")
         || l.starts_with("empty:")
         || l.starts_with("len:")
