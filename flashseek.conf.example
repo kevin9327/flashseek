@@ -1,0 +1,6 @@
+# Copy to %USERPROFILE%\flashseek.conf and point the CLI/UI at it.
+# Names: complete catalog of this root. Content: bodies in listed folders only.
+
+name_root=C:\
+content_root=C:\Users\Public\Documents
+# content_root=C:\Users\you\Downloads
