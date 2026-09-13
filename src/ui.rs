@@ -145,6 +145,14 @@ impl eframe::App for FlashseekApp {
                 }
             }
         }
+        if ctx.input(|i| i.key_pressed(egui::Key::ArrowDown)) && !self.hits.is_empty() {
+            let n = self.hits.len();
+            self.selected = Some(self.selected.map(|i| (i + 1) % n).unwrap_or(0));
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::ArrowUp)) && !self.hits.is_empty() {
+            let n = self.hits.len();
+            self.selected = Some(self.selected.map(|i| (i + n - 1) % n).unwrap_or(n - 1));
+        }
         if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
             if let Some(i) = self.selected {
                 if let Some(hit) = self.hits.get(i) {
