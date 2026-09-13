@@ -34,6 +34,7 @@ Flashseek accepts Everything-class operators and Korean natural language. Both c
 - `files:` / `dir:` — aliases of `file:` / `folder:`
 - `stem:` — match the name without extension
 - `extlen:` — length of the extension (after the last dot)
+- `noext:` — files with no extension
 - `hidden:` `readonly:` `system:` — attrib aliases
 - `attrib:R` / `attrib:H` / `attrib:D` — readonly, hidden, directory (Windows file attributes)
 
