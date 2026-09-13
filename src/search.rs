@@ -4,8 +4,8 @@ use std::time::SystemTime;
 use crate::catalog::Catalog;
 use crate::content::ContentIndex;
 use crate::nl::compile_nl;
-use crate::query::{Atom, Query};
-use crate::rank::rank_hits_with_terms;
+use crate::query::{Atom, Query, SortMode};
+use crate::rank::{rank_hits_with_terms, sort_hits_by};
 use crate::types::{FileRecord, Hit};
 
 pub fn search(catalog: &Catalog, content: &ContentIndex, query: &Query, now: SystemTime) -> Vec<Hit> {
@@ -20,7 +20,10 @@ pub fn search(catalog: &Catalog, content: &ContentIndex, query: &Query, now: Sys
     } else {
         collect_hits(catalog.iter(), content, query, &terms)
     };
-    rank_hits_with_terms(&mut hits, now, &terms);
+    match query.sort {
+        SortMode::Score => rank_hits_with_terms(&mut hits, now, &terms),
+        mode => sort_hits_by(&mut hits, mode),
+    }
     hits
 }
 

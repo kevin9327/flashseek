@@ -1,6 +1,7 @@
 use std::path::Path;
 use std::time::{Duration, SystemTime};
 
+use crate::query::SortMode;
 use crate::types::Hit;
 
 const NAME_WEIGHT: f64 = 1000.0;
@@ -26,6 +27,32 @@ pub fn rank_hits_with_terms(hits: &mut [Hit], now: SystemTime, terms: &[String])
             .unwrap_or(std::cmp::Ordering::Equal)
             .then_with(|| a.record.name.cmp(&b.record.name))
     });
+}
+
+/// Replace score ranking with size / date / name order. `Score` sorts by the
+/// already-computed `Hit.score` (descending) then name.
+pub fn sort_hits_by(hits: &mut [Hit], mode: SortMode) {
+    match mode {
+        SortMode::Score => hits.sort_by(|a, b| {
+            b.score
+                .partial_cmp(&a.score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.record.name.cmp(&b.record.name))
+        }),
+        SortMode::Size => hits.sort_by(|a, b| {
+            b.record
+                .size
+                .cmp(&a.record.size)
+                .then_with(|| a.record.name.cmp(&b.record.name))
+        }),
+        SortMode::Date => hits.sort_by(|a, b| {
+            b.record
+                .modified
+                .cmp(&a.record.modified)
+                .then_with(|| a.record.name.cmp(&b.record.name))
+        }),
+        SortMode::Name => hits.sort_by(|a, b| a.record.name.cmp(&b.record.name)),
+    }
 }
 
 pub fn score(hit: &Hit, now: SystemTime, terms: &[String]) -> f64 {

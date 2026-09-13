@@ -88,6 +88,16 @@ impl SizeFilter {
     }
 }
 
+/// Result order after hits are collected. `Score` keeps ranking; the others replace it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum SortMode {
+    #[default]
+    Score,
+    Size,
+    Date,
+    Name,
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Query {
     pub must: Vec<Atom>,
@@ -114,6 +124,8 @@ pub struct Query {
     pub parent: Option<String>,
     /// `path:` — the full path contains this token (filter, not a must-term).
     pub path_contains: Option<String>,
+    /// `sort:size` / `sort:date` / `sort:name` — replace score ranking.
+    pub sort: SortMode,
 }
 
 impl Query {
@@ -133,7 +145,7 @@ impl Query {
 /// Everything-class operators: space=AND, `|=OR`, `!=NOT`, `*`/`?`,
 /// `ext:`, `size:`, `dm:`, `n:`/`name:`, `file:`, `folder:`, `case:`,
 /// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`, `parent:`, `path:`,
-/// `"quoted phrase"`.
+/// `sort:size`/`sort:date`/`sort:name`, `"quoted phrase"`.
 pub fn parse_query(input: &str, now: SystemTime) -> Query {
     let tokens = tokenize(input);
     let mut q = Query::default();
@@ -190,6 +202,10 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
         } else if let Some(rest) = strip_prefix_ci(t, "path:") {
             if !rest.is_empty() {
                 q.path_contains = Some(rest.to_string());
+            }
+        } else if let Some(rest) = strip_prefix_ci(t, "sort:") {
+            if let Some(mode) = parse_sort(rest) {
+                q.sort = mode;
             }
         } else if t == "|" {
             let next = tokens.get(i + 1).cloned();
@@ -272,6 +288,7 @@ fn is_filter(t: &str) -> bool {
         || l.starts_with("attrib:")
         || l.starts_with("parent:")
         || l.starts_with("path:")
+        || l.starts_with("sort:")
 }
 
 fn strip_prefix_ci<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
@@ -304,6 +321,16 @@ pub fn tokenize(s: &str) -> Vec<String> {
         out.push(cur);
     }
     out
+}
+
+fn parse_sort(spec: &str) -> Option<SortMode> {
+    match spec.trim().to_ascii_lowercase().as_str() {
+        "size" => Some(SortMode::Size),
+        "date" => Some(SortMode::Date),
+        "name" => Some(SortMode::Name),
+        "score" => Some(SortMode::Score),
+        _ => None,
+    }
 }
 
 fn parse_size(spec: &str) -> Option<SizeFilter> {
@@ -821,5 +848,32 @@ mod tests {
         assert!(bare.parent.is_none());
         assert!(bare.path_contains.is_none());
         assert!(bare.must.is_empty());
+    }
+
+    #[test]
+    fn sort_tokens_set_mode_and_are_filters() {
+        assert_eq!(parse_query("report", now()).sort, SortMode::Score);
+
+        let size = parse_query("sort:size", now());
+        assert_eq!(size.sort, SortMode::Size);
+        assert!(size.must.is_empty());
+
+        let date = parse_query("SORT:DATE", now());
+        assert_eq!(date.sort, SortMode::Date);
+        assert!(date.must.is_empty());
+
+        let name = parse_query("sort:name", now());
+        assert_eq!(name.sort, SortMode::Name);
+        assert!(name.must.is_empty());
+
+        let mixed = parse_query("report sort:size", now());
+        assert_eq!(mixed.sort, SortMode::Size);
+        match &mixed.must[0] {
+            Atom::Term(p) => assert_eq!(p.raw, "report"),
+            _ => panic!("expected term"),
+        }
+
+        let last = parse_query("sort:size sort:date", now());
+        assert_eq!(last.sort, SortMode::Date);
     }
 }
