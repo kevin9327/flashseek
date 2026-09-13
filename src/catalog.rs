@@ -55,9 +55,26 @@ impl Catalog {
                 new_name,
                 new_path,
             } => {
-                if let Some(rec) = self.by_id.get_mut(&id) {
+                let (old_path, is_dir) = {
+                    let Some(rec) = self.by_id.get_mut(&id) else {
+                        return;
+                    };
+                    let old_path = rec.path.clone();
+                    let is_dir = rec.is_dir;
                     rec.name = new_name;
-                    rec.path = new_path;
+                    rec.path = new_path.clone();
+                    (old_path, is_dir)
+                };
+                // Directory rename rewrites descendant path prefixes so children stay under the new location.
+                if is_dir {
+                    for rec in self.by_id.values_mut() {
+                        if rec.id == id {
+                            continue;
+                        }
+                        if let Ok(rel) = rec.path.strip_prefix(&old_path) {
+                            rec.path = new_path.join(rel);
+                        }
+                    }
                 }
             }
         }
