@@ -74,6 +74,18 @@ pub fn compile_nl(input: &str, now: SystemTime) -> Query {
             push_ext(&mut q, "jpeg");
             continue;
         }
+        if lower == "동영상" || lower == "영상" {
+            push_ext(&mut q, "mp4");
+            push_ext(&mut q, "mkv");
+            push_ext(&mut q, "webm");
+            continue;
+        }
+        if lower == "음악" {
+            push_ext(&mut q, "mp3");
+            push_ext(&mut q, "wav");
+            push_ext(&mut q, "flac");
+            continue;
+        }
         if lower == "문서" {
             // Hangul type word: documents → docx + pdf.
             push_ext(&mut q, "docx");
@@ -131,6 +143,7 @@ fn looks_structured(s: &str) -> bool {
         || s.to_ascii_lowercase().contains("ext:")
         || s.to_ascii_lowercase().contains("size:")
         || s.to_ascii_lowercase().contains("dm:")
+        || s.to_ascii_lowercase().contains("attrib:")
 }
 
 fn strip_prefix_ci<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {

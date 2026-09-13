@@ -25,6 +25,14 @@ fn photo_word_sets_image_extensions() {
 }
 
 #[test]
+fn video_and_music_words_set_extensions() {
+    let q = compile_nl("동영상 휴가", now());
+    assert!(q.extensions.contains(&"mp4".to_string()));
+    let q = compile_nl("음악 ost", now());
+    assert!(q.extensions.contains(&"mp3".to_string()));
+}
+
+#[test]
 fn last_week_tax_pdf_still_compiles() {
     let q = compile_nl("지난주 세금 pdf", now());
     assert_eq!(q.extensions, vec!["pdf".to_string()]);
