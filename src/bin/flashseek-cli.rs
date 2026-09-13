@@ -11,6 +11,7 @@ fn main() -> ExitCode {
     let mut query = String::new();
     let mut json = false;
     let mut now = SystemTime::now();
+    let mut out_path: Option<PathBuf> = None;
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
@@ -25,6 +26,10 @@ fn main() -> ExitCode {
             "--query" => {
                 i += 1;
                 query = args.get(i).cloned().unwrap_or_default();
+            }
+            "--out" => {
+                i += 1;
+                out_path = args.get(i).map(PathBuf::from);
             }
             "--json" => json = true,
             "--now-epoch-secs" => {
@@ -64,19 +69,28 @@ fn main() -> ExitCode {
         }
     };
     let hits = engine.query(&query, now);
-    if json {
+    let body = if json {
         let rows: Vec<HitJson> = hits.iter().map(HitJson::from).collect();
         match serde_json::to_string_pretty(&rows) {
-            Ok(s) => println!("{s}"),
+            Ok(s) => s,
             Err(e) => {
                 eprintln!("json failed: {e}");
                 return ExitCode::from(1);
             }
         }
     } else {
-        for hit in &hits {
-            println!("{}", hit.record.path.display());
+        hits.iter()
+            .map(|h| h.record.path.display().to_string())
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    if let Some(path) = out_path {
+        if let Err(e) = std::fs::write(&path, body.as_bytes()) {
+            eprintln!("write {}: {e}", path.display());
+            return ExitCode::from(1);
         }
+    } else {
+        println!("{body}");
     }
     ExitCode::SUCCESS
 }
