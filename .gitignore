@@ -1,0 +1,8 @@
+/target
+**/*.rs.bk
+.idea/
+.vscode/
+*.pdb
+*.exe
+!src/**/*.rs
+.DS_Store
