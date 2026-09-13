@@ -229,6 +229,11 @@ fn filters_ok(
             return false;
         }
     }
+    if let Some(ref root) = query.root {
+        if !location_prefix(&path.to_string_lossy(), root) {
+            return false;
+        }
+    }
     true
 }
 
@@ -247,6 +252,10 @@ fn location_eq(a: &str, b: &str) -> bool {
 
 fn location_contains(hay: &str, needle: &str) -> bool {
     normalize_location(hay).contains(&normalize_location(needle))
+}
+
+fn location_prefix(hay: &str, prefix: &str) -> bool {
+    normalize_location(hay).starts_with(&normalize_location(prefix))
 }
 
 fn normalize_location(s: &str) -> String {

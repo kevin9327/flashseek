@@ -182,6 +182,8 @@ pub struct Query {
     pub parent: Option<String>,
     /// `path:` — the full path contains this token (filter, not a must-term).
     pub path_contains: Option<String>,
+    /// `root:` — `FileRecord.path` starts with this prefix (filter, not a must-term).
+    pub root: Option<String>,
     /// `sort:size` / `sort:date` / `sort:name` — replace score ranking.
     pub sort: SortMode,
     /// `count:N` / `max:N` — keep at most N hits after ranking/sort.
@@ -206,7 +208,7 @@ impl Query {
 /// `ext:`/`type:`, `pic:`/`video:`/`audio:`/`zip:`/`exe:`/`doc:` (set extension lists), `size:`,
 /// `empty:`/`empty:yes` (size == 0), `len:`, `depth:`, `dm:`/`datemodified:`/`modified:`,
 /// `n:`/`name:`, `file:`, `folder:`, `case:`,
-/// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`, `parent:`, `path:`,
+/// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`, `parent:`, `path:`, `root:`,
 /// `content:`/`body:`, `startwith:`/`start:`, `endwith:`/`end:`,
 /// `sort:size`/`sort:date`/`sort:name`, `count:N`/`max:N`, `"quoted phrase"`.
 pub fn parse_query(input: &str, now: SystemTime) -> Query {
@@ -276,6 +278,10 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
         } else if let Some(rest) = strip_prefix_ci(t, "path:") {
             if !rest.is_empty() {
                 q.path_contains = Some(rest.to_string());
+            }
+        } else if let Some(rest) = strip_prefix_ci(t, "root:") {
+            if !rest.is_empty() {
+                q.root = Some(rest.to_string());
             }
         } else if let Some(rest) = strip_content_prefix(t) {
             if !rest.is_empty() {
@@ -458,6 +464,7 @@ fn is_filter(t: &str) -> bool {
         || l.starts_with("attrib:")
         || l.starts_with("parent:")
         || l.starts_with("path:")
+        || l.starts_with("root:")
         || l.starts_with("content:")
         || l.starts_with("body:")
         || l.starts_with("sort:")
@@ -1046,6 +1053,33 @@ mod tests {
         let bare = parse_query("parent: path:", now());
         assert!(bare.parent.is_none());
         assert!(bare.path_contains.is_none());
+        assert!(bare.must.is_empty());
+    }
+
+    #[test]
+    fn root_token_is_a_filter() {
+        let r = parse_query(r"root:C:\Users", now());
+        assert_eq!(r.root.as_deref(), Some(r"C:\Users"));
+        assert!(r.must.is_empty());
+        assert!(r.parent.is_none());
+        assert!(r.path_contains.is_none());
+
+        let ci = parse_query(r"ROOT:C:\Users", now());
+        assert_eq!(ci.root.as_deref(), Some(r"C:\Users"));
+
+        let mixed = parse_query(r"report root:C:\Users", now());
+        assert_eq!(mixed.root.as_deref(), Some(r"C:\Users"));
+        match &mixed.must[0] {
+            Atom::Term(pat) => assert_eq!(pat.raw, "report"),
+            _ => panic!("expected term"),
+        }
+
+        let quoted = parse_query(r#"root:"C:\Program Files""#, now());
+        assert_eq!(quoted.root.as_deref(), Some(r"C:\Program Files"));
+        assert!(quoted.must.is_empty());
+
+        let bare = parse_query("root:", now());
+        assert!(bare.root.is_none());
         assert!(bare.must.is_empty());
     }
 
