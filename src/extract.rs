@@ -5,7 +5,7 @@ use std::path::Path;
 const EXTRACTABLE: &[&str] = &[
     "txt", "md", "html", "htm", "xml", "pdf", "docx", "xlsx", "pptx", "csv", "json", "log",
     "ini", "cfg", "toml", "yaml", "yml", "rs", "py", "js", "ts", "tsx", "jsx", "go", "java",
-    "kt", "c", "h", "cpp", "cs", "rb", "php", "sh", "ps1", "rtf",
+    "kt", "c", "h", "cpp", "cs", "rb", "php", "sh", "ps1", "rtf", "svg",
 ];
 
 pub fn is_extractable(path: &Path) -> bool {
@@ -55,7 +55,7 @@ pub fn extract_text(path: &Path) -> io::Result<String> {
         "txt" | "md" | "csv" | "json" | "log" | "ini" | "cfg" | "toml" | "yaml" | "yml" | "rs"
         | "py" | "js" | "ts" | "tsx" | "jsx" | "go" | "java" | "kt" | "c" | "h" | "cpp" | "cs"
         | "rb" | "php" | "sh" | "ps1" => read_plain_text(path),
-        "html" | "htm" | "xml" => Ok(strip_html(&fs::read_to_string(path)?)),
+        "html" | "htm" | "xml" | "svg" => Ok(strip_html(&fs::read_to_string(path)?)),
         "rtf" => Ok(extract_rtf(&fs::read_to_string(path)?)),
         "pdf" => Ok(extract_pdf(&fs::read(path)?)),
         "docx" => extract_office(path, |n| n == "word/document.xml" || n.ends_with("/document.xml")),
