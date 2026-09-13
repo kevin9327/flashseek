@@ -25,6 +25,12 @@ impl Engine {
         Ok(engine)
     }
 
+    pub fn from_config_file(path: &Path) -> io::Result<Self> {
+        let text = std::fs::read_to_string(path)?;
+        let cfg = parse_engine_config(&text)?;
+        Self::from_roots(&cfg.name_root, &cfg.content_roots)
+    }
+
     pub fn apply(&mut self, event: CatalogEvent) {
         self.catalog.apply(event);
     }
@@ -97,5 +103,23 @@ mod tests {
     fn rejects_missing_name_root() {
         let err = parse_engine_config("content_root=C:\\docs\n").unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn from_config_file_indexes_named_root() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("hello.txt"), "hi").unwrap();
+        let cfg_path = tmp.path().join("flashseek.conf");
+        std::fs::write(
+            &cfg_path,
+            format!(
+                "name_root={}\ncontent_root={}\n",
+                tmp.path().display(),
+                tmp.path().display()
+            ),
+        )
+        .unwrap();
+        let engine = Engine::from_config_file(&cfg_path).unwrap();
+        assert!(engine.catalog.iter().any(|r| r.name == "hello.txt"));
     }
 }
