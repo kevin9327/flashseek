@@ -5,7 +5,7 @@ use std::path::Path;
 const EXTRACTABLE: &[&str] = &[
     "txt", "md", "html", "htm", "xml", "pdf", "docx", "xlsx", "pptx", "csv", "json", "log",
     "ini", "cfg", "toml", "yaml", "yml", "rs", "py", "js", "ts", "tsx", "jsx", "go", "java",
-    "kt", "c", "h", "cpp", "cs", "rb", "php", "sh", "ps1",
+    "kt", "c", "h", "cpp", "cs", "rb", "php", "sh", "ps1", "rtf",
 ];
 
 pub fn is_extractable(path: &Path) -> bool {
@@ -56,6 +56,7 @@ pub fn extract_text(path: &Path) -> io::Result<String> {
         | "py" | "js" | "ts" | "tsx" | "jsx" | "go" | "java" | "kt" | "c" | "h" | "cpp" | "cs"
         | "rb" | "php" | "sh" | "ps1" => read_plain_text(path),
         "html" | "htm" | "xml" => Ok(strip_html(&fs::read_to_string(path)?)),
+        "rtf" => Ok(extract_rtf(&fs::read_to_string(path)?)),
         "pdf" => Ok(extract_pdf(&fs::read(path)?)),
         "docx" => extract_office(path, |n| n == "word/document.xml" || n.ends_with("/document.xml")),
         "xlsx" => extract_office(path, |n| {
@@ -67,6 +68,36 @@ pub fn extract_text(path: &Path) -> io::Result<String> {
             format!("unsupported type {ext}"),
         )),
     }
+}
+
+/// Pull visible text from a tiny RTF document (`{\rtf1 ... hello}`).
+pub fn extract_rtf(rtf: &str) -> String {
+    let mut out = String::new();
+    let mut chars = rtf.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '{' | '}' => {}
+            '\\' => {
+                if chars.peek() == Some(&'\\') {
+                    chars.next();
+                    out.push('\\');
+                    continue;
+                }
+                while let Some(&n) = chars.peek() {
+                    if n.is_ascii_alphabetic() {
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+                if chars.peek() == Some(&' ') {
+                    chars.next();
+                }
+            }
+            _ => out.push(c),
+        }
+    }
+    collapse_ws(&out)
 }
 
 pub fn strip_html(html: &str) -> String {
@@ -221,6 +252,14 @@ fn is_hangul(c: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rtf_keeps_visible_text() {
+        let t = extract_rtf(r"{\rtf1\ansi hello \b 세금\b0 }");
+        assert!(t.contains("hello"));
+        assert!(t.contains("세금"));
+        assert!(is_extractable(Path::new("a.rtf")));
+    }
 
     #[test]
     fn html_strips_tags() {
