@@ -197,6 +197,8 @@ pub struct Query {
     pub ext_len: Option<SizeFilter>,
     /// `noext:` — `Path::extension()` is None (files only; directories are excluded).
     pub no_ext: bool,
+    /// `dot:` — basename starts with `.`
+    pub dotfile: bool,
     /// `depth:` — path components after Prefix and RootDir (`C:\a\b\c.txt` is 3).
     pub depth: Option<SizeFilter>,
     pub modified_after: Option<SystemTime>,
@@ -278,6 +280,10 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
         } else if let Some(rest) = strip_prefix_ci(t, "noext:") {
             if rest.is_empty() {
                 q.no_ext = true;
+            }
+        } else if let Some(rest) = strip_prefix_ci(t, "dot:") {
+            if rest.is_empty() {
+                q.dotfile = true;
             }
         } else if let Some(rest) = strip_prefix_ci(t, "depth:") {
             if let Some(f) = parse_size(rest) {
@@ -530,6 +536,7 @@ fn is_filter(t: &str) -> bool {
         || l.starts_with("len:")
         || l.starts_with("extlen:")
         || l.starts_with("noext:")
+        || l.starts_with("dot:")
         || l.starts_with("depth:")
         || l.starts_with("datemodified:")
         || l.starts_with("modified:")

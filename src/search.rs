@@ -186,6 +186,9 @@ fn filters_ok(
     if query.no_ext && (is_dir || path.extension().is_some()) {
         return false;
     }
+    if query.dotfile && !name.starts_with('.') {
+        return false;
+    }
     if !query.extensions.is_empty() {
         let ext = path
             .extension()
