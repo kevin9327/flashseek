@@ -57,6 +57,7 @@ fn collect_hits<'a>(
     for rec in records {
         if !filters_ok(
             rec.path.as_path(),
+            rec.name.as_str(),
             rec.size,
             rec.modified,
             rec.is_dir,
@@ -162,6 +163,7 @@ fn atom_match(
 
 fn filters_ok(
     path: &Path,
+    name: &str,
     size: u64,
     modified: SystemTime,
     is_dir: bool,
@@ -193,6 +195,11 @@ fn filters_ok(
     }
     if let Some(sz) = query.size {
         if !sz.matches(size) {
+            return false;
+        }
+    }
+    if let Some(len) = query.name_len {
+        if !len.matches(name.chars().count() as u64) {
             return false;
         }
     }

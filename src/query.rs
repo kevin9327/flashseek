@@ -158,6 +158,8 @@ pub struct Query {
     pub must_not: Vec<Pattern>,
     pub extensions: Vec<String>,
     pub size: Option<SizeFilter>,
+    /// `len:` — basename character length (unicode scalars).
+    pub name_len: Option<SizeFilter>,
     pub modified_after: Option<SystemTime>,
     pub modified_before: Option<SystemTime>,
     /// `n:` / `name:` — atoms may match the basename only, not path or body.
@@ -199,7 +201,7 @@ impl Query {
 }
 
 /// Everything-class operators: space=AND, `|=OR`, `!=NOT`, `*`/`?`,
-/// `ext:`, `size:`, `dm:`/`datemodified:`/`modified:`, `n:`/`name:`, `file:`, `folder:`, `case:`,
+/// `ext:`, `size:`, `len:`, `dm:`/`datemodified:`/`modified:`, `n:`/`name:`, `file:`, `folder:`, `case:`,
 /// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`, `parent:`, `path:`,
 /// `content:`/`body:`, `startwith:`/`start:`, `endwith:`/`end:`,
 /// `sort:size`/`sort:date`/`sort:name`, `count:N`/`max:N`, `"quoted phrase"`.
@@ -218,6 +220,10 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
         } else if let Some(rest) = strip_prefix_ci(t, "size:") {
             if let Some(f) = parse_size(rest) {
                 q.size = Some(f);
+            }
+        } else if let Some(rest) = strip_prefix_ci(t, "len:") {
+            if let Some(f) = parse_size(rest) {
+                q.name_len = Some(f);
             }
         } else if let Some(rest) = strip_dm_prefix(t) {
             apply_dm(&mut q, rest, now);
@@ -389,6 +395,7 @@ fn is_filter(t: &str) -> bool {
     let l = t.to_ascii_lowercase();
     l.starts_with("ext:")
         || l.starts_with("size:")
+        || l.starts_with("len:")
         || l.starts_with("datemodified:")
         || l.starts_with("modified:")
         || l.starts_with("dm:")
