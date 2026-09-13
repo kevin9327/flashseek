@@ -24,6 +24,10 @@ Windows instant file search. Name catalog is Everything-class (complete tree, li
 | `regex:` / `r:` | `.` `*` `^` `$` on names |
 | `parent:` / `path:` | parent folder / path contains |
 | `attrib:R` `attrib:H` `attrib:D` | readonly / hidden / directory |
+| `len:>10` | basename length |
+| `content:token` | body only |
+| `startwith:` `endwith:` | basename prefix/suffix |
+| `sort:size` `count:20` | order and cap |
 | `attrib:R` / `attrib:H` / `attrib:D` | readonly / hidden / directory |
 | `지난주 세금 pdf` | last ~7 days + `ext:pdf` + token `세금` (name **or** body) |
 | `최근` `일주일` `오늘` `어제` `이번달` `올해` | Korean date windows |
