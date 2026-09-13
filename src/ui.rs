@@ -126,9 +126,17 @@ impl eframe::App for FlashseekApp {
                         if let Some(sn) = &hit.snippet {
                             show_snippet(ui, sn);
                         } else if is_image(&hit.record.path) {
-                            ui.label("[image thumbnail — open the file to view]");
+                            ui.label("[image] double-click the row to open");
                         } else {
-                            ui.label("No content snippet. Windows preview handler is used when present in later builds.");
+                            let handler = crate::preview::should_use_handler(&hit.record.path, false);
+                            if handler {
+                                match crate::preview::preview_handler_clsid(&hit.record.path) {
+                                    Ok(Some(cls)) => ui.label(format!("Windows preview handler {cls}")),
+                                    _ => ui.label("Windows preview handler registered lookup ran; none found."),
+                                };
+                            } else {
+                                ui.label("No content snippet.");
+                            }
                         }
                     }
                 } else {
@@ -141,8 +149,15 @@ impl eframe::App for FlashseekApp {
                 for (i, hit) in self.hits.iter().enumerate() {
                     let selected = self.selected == Some(i);
                     let label = format!("{}\n{}", hit.record.name, hit.record.path.display());
-                    if ui.selectable_label(selected, label).clicked() {
+                    let resp = ui.selectable_label(selected, label);
+                    if resp.clicked() {
                         self.selected = Some(i);
+                    }
+                    if resp.double_clicked() {
+                        let path = hit.record.path.clone();
+                        let _ = std::process::Command::new("cmd")
+                            .args(["/C", "start", "", &path.to_string_lossy()])
+                            .spawn();
                     }
                 }
             });
