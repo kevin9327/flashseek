@@ -79,7 +79,8 @@ impl FlashseekApp {
         match Engine::from_roots(&name, &content_roots) {
             Ok(engine) => {
                 let n = engine.catalog.len();
-                self.status = format!("Indexed {n} names from {}", name.display());
+                let bodies = engine.content.bodies_len();
+                self.status = format!("Indexed {n} names, {bodies} bodies from {}", name.display());
                 self.engine = Some(engine);
                 self.refresh();
             }

@@ -48,6 +48,10 @@ impl ContentIndex {
         self.bodies.get(path).map(String::as_str)
     }
 
+    pub fn bodies_len(&self) -> usize {
+        self.bodies.len()
+    }
+
     pub fn contains_all(&self, path: &Path, terms: &[String]) -> bool {
         match self.body(path) {
             None => false,
@@ -144,9 +148,11 @@ mod tests {
         let mut idx = ContentIndex::new();
         let p = PathBuf::from("C:\\docs\\a.txt");
         idx.index(p.clone(), "alpha 세금 omega".into());
+        assert_eq!(idx.bodies_len(), 1);
         assert!(idx.paths_for_word("세금").contains(&p));
         assert!(idx.paths_for_word("alpha").contains(&p));
         idx.remove(&p);
         assert!(idx.paths_for_word("세금").is_empty());
+        assert_eq!(idx.bodies_len(), 0);
     }
 }
