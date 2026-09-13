@@ -11,6 +11,7 @@ pub mod search;
 pub mod types;
 pub mod usn;
 pub mod walk;
+pub mod watch;
 
 #[cfg(feature = "ui")]
 pub mod ui;
