@@ -201,7 +201,8 @@ impl Query {
 }
 
 /// Everything-class operators: space=AND, `|=OR`, `!=NOT`, `*`/`?`,
-/// `ext:`, `size:`, `len:`, `dm:`/`datemodified:`/`modified:`, `n:`/`name:`, `file:`, `folder:`, `case:`,
+/// `ext:`, `size:`, `empty:`/`empty:yes` (size == 0), `len:`, `dm:`/`datemodified:`/`modified:`,
+/// `n:`/`name:`, `file:`, `folder:`, `case:`,
 /// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`, `parent:`, `path:`,
 /// `content:`/`body:`, `startwith:`/`start:`, `endwith:`/`end:`,
 /// `sort:size`/`sort:date`/`sort:name`, `count:N`/`max:N`, `"quoted phrase"`.
@@ -220,6 +221,11 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
         } else if let Some(rest) = strip_prefix_ci(t, "size:") {
             if let Some(f) = parse_size(rest) {
                 q.size = Some(f);
+            }
+        } else if let Some(rest) = strip_prefix_ci(t, "empty:") {
+            // Zero-byte size filter. Directories match only if their catalog size is 0.
+            if rest.is_empty() || rest.eq_ignore_ascii_case("yes") {
+                q.size = Some(SizeFilter::Eq(0));
             }
         } else if let Some(rest) = strip_prefix_ci(t, "len:") {
             if let Some(f) = parse_size(rest) {
@@ -395,6 +401,7 @@ fn is_filter(t: &str) -> bool {
     let l = t.to_ascii_lowercase();
     l.starts_with("ext:")
         || l.starts_with("size:")
+        || l.starts_with("empty:")
         || l.starts_with("len:")
         || l.starts_with("datemodified:")
         || l.starts_with("modified:")
