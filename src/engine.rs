@@ -33,3 +33,69 @@ impl Engine {
         search_text(&self.catalog, &self.content, input, now)
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EngineConfig {
+    pub name_root: PathBuf,
+    pub content_roots: Vec<PathBuf>,
+}
+
+/// Tiny line-oriented config:
+/// `name_root=C:\`
+/// `content_root=C:\Users\me\Documents`
+pub fn parse_engine_config(text: &str) -> io::Result<EngineConfig> {
+    let mut name_root = None;
+    let mut content_roots = Vec::new();
+    for (i, raw) in text.lines().enumerate() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((k, v)) = line.split_once('=') else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("line {}: expected key=value", i + 1),
+            ));
+        };
+        let key = k.trim();
+        let val = PathBuf::from(v.trim());
+        match key {
+            "name_root" => name_root = Some(val),
+            "content_root" => content_roots.push(val),
+            other => {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("unknown key {other}"),
+                ));
+            }
+        }
+    }
+    let name_root = name_root.ok_or_else(|| {
+        io::Error::new(io::ErrorKind::InvalidData, "name_root is required")
+    })?;
+    Ok(EngineConfig {
+        name_root,
+        content_roots,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_name_and_content_roots() {
+        let cfg = parse_engine_config(
+            "name_root=C:\\\n# comment\ncontent_root=C:\\Users\\a\\Documents\ncontent_root=C:\\Users\\a\\Downloads\n",
+        )
+        .unwrap();
+        assert_eq!(cfg.name_root, PathBuf::from("C:\\"));
+        assert_eq!(cfg.content_roots.len(), 2);
+    }
+
+    #[test]
+    fn rejects_missing_name_root() {
+        let err = parse_engine_config("content_root=C:\\docs\n").unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+    }
+}
