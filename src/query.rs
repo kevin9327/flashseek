@@ -143,7 +143,7 @@ impl Query {
 }
 
 /// Everything-class operators: space=AND, `|=OR`, `!=NOT`, `*`/`?`,
-/// `ext:`, `size:`, `dm:`, `n:`/`name:`, `file:`, `folder:`, `case:`,
+/// `ext:`, `size:`, `dm:`/`datemodified:`/`modified:`, `n:`/`name:`, `file:`, `folder:`, `case:`,
 /// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`, `parent:`, `path:`,
 /// `sort:size`/`sort:date`/`sort:name`, `"quoted phrase"`.
 pub fn parse_query(input: &str, now: SystemTime) -> Query {
@@ -162,7 +162,7 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
             if let Some(f) = parse_size(rest) {
                 q.size = Some(f);
             }
-        } else if let Some(rest) = strip_prefix_ci(t, "dm:") {
+        } else if let Some(rest) = strip_dm_prefix(t) {
             apply_dm(&mut q, rest, now);
         } else if let Some(rest) = strip_name_prefix(t) {
             q.name_only = true;
@@ -265,6 +265,12 @@ fn strip_name_prefix(t: &str) -> Option<&str> {
     strip_prefix_ci(t, "name:").or_else(|| strip_prefix_ci(t, "n:"))
 }
 
+fn strip_dm_prefix(t: &str) -> Option<&str> {
+    strip_prefix_ci(t, "datemodified:")
+        .or_else(|| strip_prefix_ci(t, "modified:"))
+        .or_else(|| strip_prefix_ci(t, "dm:"))
+}
+
 fn strip_ww_prefix(t: &str) -> Option<&str> {
     strip_prefix_ci(t, "wholeword:").or_else(|| strip_prefix_ci(t, "ww:"))
 }
@@ -277,6 +283,8 @@ fn is_filter(t: &str) -> bool {
     let l = t.to_ascii_lowercase();
     l.starts_with("ext:")
         || l.starts_with("size:")
+        || l.starts_with("datemodified:")
+        || l.starts_with("modified:")
         || l.starts_with("dm:")
         || l.starts_with("name:")
         || l.starts_with("n:")
