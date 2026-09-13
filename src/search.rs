@@ -183,6 +183,9 @@ fn filters_ok(
     if query.attrib_any != 0 && (attrs & query.attrib_any) == 0 {
         return false;
     }
+    if query.no_ext && (is_dir || path.extension().is_some()) {
+        return false;
+    }
     if !query.extensions.is_empty() {
         let ext = path
             .extension()

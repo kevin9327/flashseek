@@ -195,6 +195,8 @@ pub struct Query {
     pub name_len: Option<SizeFilter>,
     /// `extlen:` — extension character length (unicode scalars after the last `.`).
     pub ext_len: Option<SizeFilter>,
+    /// `noext:` — `Path::extension()` is None (files only; directories are excluded).
+    pub no_ext: bool,
     /// `depth:` — path components after Prefix and RootDir (`C:\a\b\c.txt` is 3).
     pub depth: Option<SizeFilter>,
     pub modified_after: Option<SystemTime>,
@@ -241,7 +243,7 @@ impl Query {
 
 /// Everything-class operators: space=AND, `|=OR`, `!=NOT`, `*`/`?`,
 /// `ext:`/`type:`, `pic:`/`video:`/`audio:`/`zip:`/`exe:`/`doc:` (set extension lists), `size:`,
-/// `empty:`/`empty:yes` (size == 0), `len:`, `extlen:`, `depth:`, `dm:`/`datemodified:`/`modified:`,
+/// `empty:`/`empty:yes` (size == 0), `len:`, `extlen:`, `noext:`, `depth:`, `dm:`/`datemodified:`/`modified:`,
 /// `n:`/`name:`/`filename:`/`basename:`, `file:`/`files:`, `folder:`/`dir:`, `case:`,
 /// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`/`S`, `hidden:`/`readonly:`/`system:` (empty rest), `parent:`, `path:`, `root:`,
 /// `content:`/`body:`, `startwith:`/`start:`, `endwith:`/`end:`, `stem:`,
@@ -272,6 +274,10 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
         } else if let Some(rest) = strip_prefix_ci(t, "extlen:") {
             if let Some(f) = parse_size(rest) {
                 q.ext_len = Some(f);
+            }
+        } else if let Some(rest) = strip_prefix_ci(t, "noext:") {
+            if rest.is_empty() {
+                q.no_ext = true;
             }
         } else if let Some(rest) = strip_prefix_ci(t, "depth:") {
             if let Some(f) = parse_size(rest) {
@@ -523,6 +529,7 @@ fn is_filter(t: &str) -> bool {
         || l.starts_with("empty:")
         || l.starts_with("len:")
         || l.starts_with("extlen:")
+        || l.starts_with("noext:")
         || l.starts_with("depth:")
         || l.starts_with("datemodified:")
         || l.starts_with("modified:")
