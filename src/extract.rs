@@ -3,7 +3,7 @@ use std::io::{self, Read};
 use std::path::Path;
 
 const EXTRACTABLE: &[&str] = &[
-    "txt", "md", "html", "htm", "pdf", "docx", "xlsx", "pptx", "csv", "json", "log",
+    "txt", "md", "html", "htm", "xml", "pdf", "docx", "xlsx", "pptx", "csv", "json", "log",
 ];
 
 pub fn is_extractable(path: &Path) -> bool {
@@ -22,7 +22,7 @@ pub fn extract_text(path: &Path) -> io::Result<String> {
     let ext = ext_of(path).unwrap_or_default();
     match ext.as_str() {
         "txt" | "md" | "csv" | "json" | "log" => fs::read_to_string(path),
-        "html" | "htm" => Ok(strip_html(&fs::read_to_string(path)?)),
+        "html" | "htm" | "xml" => Ok(strip_html(&fs::read_to_string(path)?)),
         "pdf" => Ok(extract_pdf(&fs::read(path)?)),
         "docx" => extract_office(path, |n| n == "word/document.xml" || n.ends_with("/document.xml")),
         "xlsx" => extract_office(path, |n| {
@@ -199,6 +199,7 @@ mod tests {
         assert!(is_extractable(Path::new("a.csv")));
         assert!(is_extractable(Path::new("a.json")));
         assert!(is_extractable(Path::new("a.log")));
+        assert!(is_extractable(Path::new("a.xml")));
     }
 
     #[test]
