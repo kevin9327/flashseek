@@ -5,11 +5,13 @@ use std::time::{Duration, SystemTime};
 use flashseek::{Engine, Hit, HitJson};
 
 const HELP: &str = "\
-flashseek-cli --name-root DIR --content-root DIR --query TEXT [--json] [--now-epoch-secs N] [--out PATH] [--max-results N] [--files-only] [--folders-only] [--config FILE]
+flashseek-cli --name-root DIR --content-root DIR --query TEXT [--json] [--now-epoch-secs N] [--out PATH] [--max-results N] [--files-only] [--folders-only] [--config FILE] [--count] [--quiet]
   --max-results N  max hits after search (0 = unlimited)
   --files-only     keep files only
   --folders-only   keep folders only
   --config FILE    name_root=/ content_root=/ lines; flags override
+  --count          print hit total after filters (wins over --json)
+  --quiet          with --count, suppress non-JSON path lists
 ";
 
 #[derive(Debug)]
@@ -26,6 +28,8 @@ struct Cli {
     folders_only: bool,
     help: bool,
     config_path: Option<PathBuf>,
+    count: bool,
+    quiet: bool,
 }
 
 impl Default for Cli {
@@ -42,6 +46,8 @@ impl Default for Cli {
             folders_only: false,
             help: false,
             config_path: None,
+            count: false,
+            quiet: false,
         }
     }
 }
@@ -87,6 +93,8 @@ fn parse_args(args: &[String]) -> Result<Cli, String> {
             }
             "--files-only" => cli.files_only = true,
             "--folders-only" => cli.folders_only = true,
+            "--count" => cli.count = true,
+            "--quiet" => cli.quiet = true,
             "--config" => {
                 i += 1;
                 cli.config_path = args.get(i).map(PathBuf::from);
@@ -170,7 +178,10 @@ fn main() -> ExitCode {
         }
     };
     let hits = apply_cli_filters(engine.query(&cli.query, cli.now), &cli);
-    let body = if cli.json {
+    // --count wins over --json: print hits.len() as decimal, skip paths/json.
+    let body = if cli.count {
+        hits.len().to_string()
+    } else if cli.json {
         let rows: Vec<HitJson> = hits.iter().map(HitJson::from).collect();
         match serde_json::to_string_pretty(&rows) {
             Ok(s) => s,
@@ -179,6 +190,8 @@ fn main() -> ExitCode {
                 return ExitCode::from(1);
             }
         }
+    } else if cli.quiet {
+        String::new()
     } else {
         hits.iter()
             .map(|h| h.record.path.display().to_string())
@@ -190,7 +203,7 @@ fn main() -> ExitCode {
             eprintln!("write {}: {e}", path.display());
             return ExitCode::from(1);
         }
-    } else {
+    } else if cli.count || cli.json || !cli.quiet {
         println!("{body}");
     }
     ExitCode::SUCCESS
@@ -244,6 +257,8 @@ mod tests {
         assert!(!cli.folders_only);
         assert!(!cli.help);
         assert!(!cli.json);
+        assert!(!cli.count);
+        assert!(!cli.quiet);
     }
 
     #[test]
@@ -313,6 +328,37 @@ mod tests {
         assert!(HELP.contains("--files-only"));
         assert!(HELP.contains("--folders-only"));
         assert!(HELP.contains("--config"));
+        assert!(HELP.contains("--count"));
+        assert!(HELP.contains("--quiet"));
+    }
+
+    #[test]
+    fn count_flag() {
+        let cli = parse_args(&args(&["--count"])).unwrap();
+        assert!(cli.count);
+        assert!(!cli.quiet);
+        assert!(!cli.json);
+    }
+
+    #[test]
+    fn quiet_flag() {
+        let cli = parse_args(&args(&["--quiet"])).unwrap();
+        assert!(cli.quiet);
+        assert!(!cli.count);
+    }
+
+    #[test]
+    fn count_and_quiet_together() {
+        let cli = parse_args(&args(&["--count", "--quiet"])).unwrap();
+        assert!(cli.count);
+        assert!(cli.quiet);
+    }
+
+    #[test]
+    fn count_and_json_both_parse_count_wins_at_output() {
+        let cli = parse_args(&args(&["--json", "--count"])).unwrap();
+        assert!(cli.json);
+        assert!(cli.count);
     }
 
     #[test]
