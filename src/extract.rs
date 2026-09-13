@@ -18,10 +18,21 @@ pub fn ext_of(path: &Path) -> Option<String> {
         .map(|s| s.to_ascii_lowercase())
 }
 
+/// Skip a UTF-8 BOM (`EF BB BF`) so the first body token is searchable.
+fn skip_utf8_bom(bytes: &[u8]) -> &[u8] {
+    bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(bytes)
+}
+
+fn read_plain_text(path: &Path) -> io::Result<String> {
+    let bytes = fs::read(path)?;
+    String::from_utf8(skip_utf8_bom(&bytes).to_vec())
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+}
+
 pub fn extract_text(path: &Path) -> io::Result<String> {
     let ext = ext_of(path).unwrap_or_default();
     match ext.as_str() {
-        "txt" | "md" | "csv" | "json" | "log" => fs::read_to_string(path),
+        "txt" | "md" | "csv" | "json" | "log" => read_plain_text(path),
         "html" | "htm" | "xml" => Ok(strip_html(&fs::read_to_string(path)?)),
         "pdf" => Ok(extract_pdf(&fs::read(path)?)),
         "docx" => extract_office(path, |n| n == "word/document.xml" || n.ends_with("/document.xml")),
@@ -200,6 +211,13 @@ mod tests {
         assert!(is_extractable(Path::new("a.json")));
         assert!(is_extractable(Path::new("a.log")));
         assert!(is_extractable(Path::new("a.xml")));
+    }
+
+    #[test]
+    fn skip_utf8_bom_drops_ef_bb_bf() {
+        assert_eq!(skip_utf8_bom(&[0xEF, 0xBB, 0xBF, b'a']), b"a");
+        assert_eq!(skip_utf8_bom(b"abc"), b"abc");
+        assert_eq!(skip_utf8_bom(&[0xEF, 0xBB]), &[0xEF, 0xBB]);
     }
 
     #[test]
