@@ -64,6 +64,16 @@ pub fn compile_nl(input: &str, now: SystemTime) -> Query {
             q.modified_after = now.checked_sub(Duration::from_secs(365 * 24 * 3600));
             continue;
         }
+        if lower == "최근" || lower == "일주일" {
+            q.modified_after = now.checked_sub(Duration::from_secs(7 * 24 * 3600));
+            continue;
+        }
+        if lower == "사진" || lower == "이미지" {
+            push_ext(&mut q, "png");
+            push_ext(&mut q, "jpg");
+            push_ext(&mut q, "jpeg");
+            continue;
+        }
         if lower == "문서" {
             // Hangul type word: documents → docx + pdf.
             push_ext(&mut q, "docx");
