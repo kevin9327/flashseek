@@ -28,6 +28,8 @@ Windows instant file search. Name catalog is Everything-class (complete tree, li
 | `content:token` | body only |
 | `startwith:` `endwith:` | basename prefix/suffix |
 | `sort:size` `count:20` | order and cap |
+| `pic:` `video:` `zip:` `exe:` `doc:` | type macros |
+| `root:` `depth:` `empty:` `hidden:` | location and attrib shortcuts |
 | `attrib:R` / `attrib:H` / `attrib:D` | readonly / hidden / directory |
 | `지난주 세금 pdf` | last ~7 days + `ext:pdf` + token `세금` (name **or** body) |
 | `최근` `일주일` `오늘` `어제` `이번달` `올해` | Korean date windows |
