@@ -110,6 +110,10 @@ pub struct Query {
     pub attrib_mask: u32,
     /// `attrib:R|H` — Windows `FILE_ATTRIBUTE_*` bits of which any may be set.
     pub attrib_any: u32,
+    /// `parent:` — `FileRecord.path`'s parent equals this path.
+    pub parent: Option<String>,
+    /// `path:` — the full path contains this token (filter, not a must-term).
+    pub path_contains: Option<String>,
 }
 
 impl Query {
@@ -128,7 +132,8 @@ impl Query {
 
 /// Everything-class operators: space=AND, `|=OR`, `!=NOT`, `*`/`?`,
 /// `ext:`, `size:`, `dm:`, `n:`/`name:`, `file:`, `folder:`, `case:`,
-/// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`, `"quoted phrase"`.
+/// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`, `parent:`, `path:`,
+/// `"quoted phrase"`.
 pub fn parse_query(input: &str, now: SystemTime) -> Query {
     let tokens = tokenize(input);
     let mut q = Query::default();
@@ -178,6 +183,14 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
             }
         } else if let Some(rest) = strip_prefix_ci(t, "attrib:") {
             apply_attrib(&mut q, rest);
+        } else if let Some(rest) = strip_prefix_ci(t, "parent:") {
+            if !rest.is_empty() {
+                q.parent = Some(rest.to_string());
+            }
+        } else if let Some(rest) = strip_prefix_ci(t, "path:") {
+            if !rest.is_empty() {
+                q.path_contains = Some(rest.to_string());
+            }
         } else if t == "|" {
             let next = tokens.get(i + 1).cloned();
             if let (Some(Atom::Term(prev)), Some(n)) = (q.must.pop(), next) {
@@ -257,6 +270,8 @@ fn is_filter(t: &str) -> bool {
         || l.starts_with("ww:")
         || l.starts_with("wholeword:")
         || l.starts_with("attrib:")
+        || l.starts_with("parent:")
+        || l.starts_with("path:")
 }
 
 fn strip_prefix_ci<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
@@ -773,5 +788,38 @@ mod tests {
         let bare = parse_query("attrib:", now());
         assert_eq!(bare.attrib_mask, 0);
         assert_eq!(bare.attrib_any, 0);
+    }
+
+    #[test]
+    fn parent_and_path_tokens_are_filters() {
+        let p = parse_query(r"parent:C:\docs", now());
+        assert_eq!(p.parent.as_deref(), Some(r"C:\docs"));
+        assert!(p.must.is_empty());
+        assert!(p.path_contains.is_none());
+
+        let path = parse_query("path:docs", now());
+        assert_eq!(path.path_contains.as_deref(), Some("docs"));
+        assert!(path.must.is_empty());
+        assert!(path.parent.is_none());
+
+        let ci = parse_query(r"PARENT:C:\docs PATH:Docs", now());
+        assert_eq!(ci.parent.as_deref(), Some(r"C:\docs"));
+        assert_eq!(ci.path_contains.as_deref(), Some("Docs"));
+
+        let mixed = parse_query(r"report parent:C:\docs", now());
+        assert_eq!(mixed.parent.as_deref(), Some(r"C:\docs"));
+        match &mixed.must[0] {
+            Atom::Term(pat) => assert_eq!(pat.raw, "report"),
+            _ => panic!("expected term"),
+        }
+
+        let quoted = parse_query(r#"parent:"C:\Program Files""#, now());
+        assert_eq!(quoted.parent.as_deref(), Some(r"C:\Program Files"));
+        assert!(quoted.must.is_empty());
+
+        let bare = parse_query("parent: path:", now());
+        assert!(bare.parent.is_none());
+        assert!(bare.path_contains.is_none());
+        assert!(bare.must.is_empty());
     }
 }

@@ -184,7 +184,44 @@ fn filters_ok(
             return false;
         }
     }
+    if let Some(ref parent) = query.parent {
+        match path.parent() {
+            Some(p) if location_eq(&p.to_string_lossy(), parent) => {}
+            _ => return false,
+        }
+    }
+    if let Some(ref token) = query.path_contains {
+        if !location_contains(&path.to_string_lossy(), token) {
+            return false;
+        }
+    }
     true
+}
+
+/// Normalize `\`/`/` and compare case-insensitively (Windows paths).
+fn location_eq(a: &str, b: &str) -> bool {
+    normalize_location(a) == normalize_location(b)
+}
+
+fn location_contains(hay: &str, needle: &str) -> bool {
+    normalize_location(hay).contains(&normalize_location(needle))
+}
+
+fn normalize_location(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        let c = if c == '/' { '\\' } else { c };
+        if c == '\\' && out.ends_with('\\') {
+            continue;
+        }
+        for lc in c.to_lowercase() {
+            out.push(lc);
+        }
+    }
+    while out.len() > 1 && out.ends_with('\\') {
+        out.pop();
+    }
+    out
 }
 
 fn effective_attributes(attributes: u32, is_dir: bool) -> u32 {
