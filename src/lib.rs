@@ -4,6 +4,7 @@ pub mod engine;
 pub mod extract;
 pub mod mft;
 pub mod nl;
+pub mod preview;
 pub mod query;
 pub mod rank;
 pub mod search;
