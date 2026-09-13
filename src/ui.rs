@@ -137,6 +137,14 @@ impl eframe::App for FlashseekApp {
         if ctx.input(|i| i.key_pressed(egui::Key::F5)) {
             self.reindex();
         }
+        if ctx.input(|i| i.key_pressed(egui::Key::C) && i.modifiers.ctrl) {
+            if let Some(i) = self.selected.or(Some(0)) {
+                if let Some(hit) = self.hits.get(i) {
+                    ctx.copy_text(hit.record.path.to_string_lossy().into_owned());
+                    self.status = format!("Copied {}", hit.record.path.display());
+                }
+            }
+        }
         if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
             if let Some(i) = self.selected {
                 if let Some(hit) = self.hits.get(i) {
