@@ -237,7 +237,6 @@ mod tests {
     }
 
     #[test]
-    #[test]
     fn utf16_le_bom_decodes() {
         let mut v = vec![0xFF, 0xFE];
         for c in "세금".encode_utf16() {
