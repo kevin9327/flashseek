@@ -61,6 +61,8 @@ cargo run --bin flashseek --features ui
 - **Content index** — extracted text for `txt` `md` `html` `pdf` `docx` `xlsx` `pptx` under configured folders only.
 - **Same functions** power the CLI and the window: parse → name match → content match → rank.
 
+Full operator list: [docs/QUERY.md](docs/QUERY.md)
+
 Repo: https://github.com/kevin9327/flashseek
 
 ## License
