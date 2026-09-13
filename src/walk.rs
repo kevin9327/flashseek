@@ -104,12 +104,23 @@ pub fn should_index_content(size: u64, extractable: bool, under_root: bool) -> b
 /// Skip VCS and package trees so the name catalog stays useful.
 /// `name_root` itself is still walked even when it matches these names.
 pub fn should_skip_dir_name(name: &str) -> bool {
-    matches!(name, ".git" | ".svn" | ".hg") || name.eq_ignore_ascii_case("node_modules")
+    matches!(
+        name,
+        ".git" | ".svn" | ".hg" | "__pycache__" | ".venv" | "target"
+    ) || name.eq_ignore_ascii_case("node_modules")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn skips_build_and_venv_dir_names() {
+        assert!(should_skip_dir_name("__pycache__"));
+        assert!(should_skip_dir_name("target"));
+        assert!(should_skip_dir_name(".venv"));
+        assert!(!should_skip_dir_name("src"));
+    }
 
     #[test]
     fn skips_huge_blobs_keeps_normal_docs() {
