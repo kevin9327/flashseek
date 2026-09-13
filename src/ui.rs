@@ -130,6 +130,13 @@ impl FlashseekApp {
 
 impl eframe::App for FlashseekApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.query.clear();
+            self.refresh();
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::F5)) {
+            self.reindex();
+        }
         if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
             if let Some(i) = self.selected {
                 if let Some(hit) = self.hits.get(i) {
