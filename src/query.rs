@@ -126,6 +126,8 @@ pub struct Query {
     pub path_contains: Option<String>,
     /// `sort:size` / `sort:date` / `sort:name` — replace score ranking.
     pub sort: SortMode,
+    /// `count:N` / `max:N` — keep at most N hits after ranking/sort.
+    pub max_results: Option<usize>,
 }
 
 impl Query {
@@ -145,7 +147,7 @@ impl Query {
 /// Everything-class operators: space=AND, `|=OR`, `!=NOT`, `*`/`?`,
 /// `ext:`, `size:`, `dm:`/`datemodified:`/`modified:`, `n:`/`name:`, `file:`, `folder:`, `case:`,
 /// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`, `parent:`, `path:`,
-/// `sort:size`/`sort:date`/`sort:name`, `"quoted phrase"`.
+/// `sort:size`/`sort:date`/`sort:name`, `count:N`/`max:N`, `"quoted phrase"`.
 pub fn parse_query(input: &str, now: SystemTime) -> Query {
     let tokens = tokenize(input);
     let mut q = Query::default();
@@ -206,6 +208,10 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
         } else if let Some(rest) = strip_prefix_ci(t, "sort:") {
             if let Some(mode) = parse_sort(rest) {
                 q.sort = mode;
+            }
+        } else if let Some(rest) = strip_count_prefix(t) {
+            if let Some(n) = parse_count(rest) {
+                q.max_results = Some(n);
             }
         } else if t == "|" {
             let next = tokens.get(i + 1).cloned();
@@ -279,6 +285,10 @@ fn strip_regex_prefix(t: &str) -> Option<&str> {
     strip_prefix_ci(t, "regex:").or_else(|| strip_prefix_ci(t, "r:"))
 }
 
+fn strip_count_prefix(t: &str) -> Option<&str> {
+    strip_prefix_ci(t, "count:").or_else(|| strip_prefix_ci(t, "max:"))
+}
+
 fn is_filter(t: &str) -> bool {
     let l = t.to_ascii_lowercase();
     l.starts_with("ext:")
@@ -297,6 +307,8 @@ fn is_filter(t: &str) -> bool {
         || l.starts_with("parent:")
         || l.starts_with("path:")
         || l.starts_with("sort:")
+        || l.starts_with("count:")
+        || l.starts_with("max:")
 }
 
 fn strip_prefix_ci<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
@@ -339,6 +351,10 @@ fn parse_sort(spec: &str) -> Option<SortMode> {
         "score" => Some(SortMode::Score),
         _ => None,
     }
+}
+
+fn parse_count(spec: &str) -> Option<usize> {
+    spec.trim().parse().ok()
 }
 
 fn parse_size(spec: &str) -> Option<SizeFilter> {
@@ -883,5 +899,32 @@ mod tests {
 
         let last = parse_query("sort:size sort:date", now());
         assert_eq!(last.sort, SortMode::Date);
+    }
+
+    #[test]
+    fn count_and_max_tokens_set_limit_and_are_filters() {
+        assert_eq!(parse_query("report", now()).max_results, None);
+
+        let count = parse_query("count:20", now());
+        assert_eq!(count.max_results, Some(20));
+        assert!(count.must.is_empty());
+
+        let max = parse_query("MAX:20", now());
+        assert_eq!(max.max_results, Some(20));
+        assert!(max.must.is_empty());
+
+        let mixed = parse_query("report count:3", now());
+        assert_eq!(mixed.max_results, Some(3));
+        match &mixed.must[0] {
+            Atom::Term(p) => assert_eq!(p.raw, "report"),
+            _ => panic!("expected term"),
+        }
+
+        let last = parse_query("count:10 max:5", now());
+        assert_eq!(last.max_results, Some(5));
+
+        let bare = parse_query("count: max:", now());
+        assert_eq!(bare.max_results, None);
+        assert!(bare.must.is_empty());
     }
 }

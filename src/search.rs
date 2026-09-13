@@ -24,6 +24,9 @@ pub fn search(catalog: &Catalog, content: &ContentIndex, query: &Query, now: Sys
         SortMode::Score => rank_hits_with_terms(&mut hits, now, &terms),
         mode => sort_hits_by(&mut hits, mode),
     }
+    if let Some(n) = query.max_results {
+        hits.truncate(n);
+    }
     hits
 }
 
