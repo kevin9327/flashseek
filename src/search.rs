@@ -35,7 +35,7 @@ pub fn search(catalog: &Catalog, content: &ContentIndex, query: &Query, now: Sys
             content_all = false;
         } else {
             for atom in &query.must {
-                let (n, p, c) = atom_match(atom, name, &path, body);
+                let (n, p, c) = atom_match(atom, name, &path, body, query.name_only);
                 if !(n || p || c) {
                     ok = false;
                     break;
@@ -78,9 +78,20 @@ pub fn search_text(
     search(catalog, content, &query, now)
 }
 
-fn atom_match(atom: &Atom, name: &str, path: &str, body: Option<&str>) -> (bool, bool, bool) {
+fn atom_match(
+    atom: &Atom,
+    name: &str,
+    path: &str,
+    body: Option<&str>,
+    name_only: bool,
+) -> (bool, bool, bool) {
+    let n = atom.matches_text(name);
+    if name_only {
+        // Path and body must not satisfy the atom when `n:` / `name:` is set.
+        return (n, false, false);
+    }
     (
-        atom.matches_text(name),
+        n,
         atom.matches_text(path),
         body.map(|b| atom.matches_text(b)).unwrap_or(false),
     )
@@ -93,6 +104,12 @@ fn filters_ok(
     is_dir: bool,
     query: &Query,
 ) -> bool {
+    if query.files_only && is_dir {
+        return false;
+    }
+    if query.folders_only && !is_dir {
+        return false;
+    }
     if !query.extensions.is_empty() {
         let ext = path
             .extension()

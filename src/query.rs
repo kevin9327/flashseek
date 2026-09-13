@@ -73,6 +73,12 @@ pub struct Query {
     pub size: Option<SizeFilter>,
     pub modified_after: Option<SystemTime>,
     pub modified_before: Option<SystemTime>,
+    /// `n:` / `name:` — atoms may match the basename only, not path or body.
+    pub name_only: bool,
+    /// `file:` — exclude directories.
+    pub files_only: bool,
+    /// `folder:` — exclude files.
+    pub folders_only: bool,
 }
 
 impl Query {
@@ -85,7 +91,8 @@ impl Query {
     }
 }
 
-/// Everything-class operators: space=AND, `|=OR`, `!=NOT`, `*`/`?`, `ext:`, `size:`, `dm:`.
+/// Everything-class operators: space=AND, `|=OR`, `!=NOT`, `*`/`?`,
+/// `ext:`, `size:`, `dm:`, `n:`/`name:`, `file:`, `folder:`, `"quoted phrase"`.
 pub fn parse_query(input: &str, now: SystemTime) -> Query {
     let tokens = tokenize(input);
     let mut q = Query::default();
@@ -104,6 +111,21 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
             }
         } else if let Some(rest) = strip_prefix_ci(t, "dm:") {
             apply_dm(&mut q, rest, now);
+        } else if let Some(rest) = strip_name_prefix(t) {
+            q.name_only = true;
+            if !rest.is_empty() {
+                push_must(&mut q, rest);
+            }
+        } else if let Some(rest) = strip_prefix_ci(t, "file:") {
+            q.files_only = true;
+            if !rest.is_empty() {
+                push_must(&mut q, rest);
+            }
+        } else if let Some(rest) = strip_prefix_ci(t, "folder:") {
+            q.folders_only = true;
+            if !rest.is_empty() {
+                push_must(&mut q, rest);
+            }
         } else if t == "|" {
             let next = tokens.get(i + 1).cloned();
             if let (Some(Atom::Term(prev)), Some(n)) = (q.must.pop(), next) {
@@ -125,28 +147,44 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
             if !rest.is_empty() {
                 q.must_not.push(Pattern::new(rest));
             }
-        } else if t.contains('|') {
-            let parts: Vec<Pattern> = t
-                .split('|')
-                .filter(|s| !s.is_empty())
-                .map(Pattern::new)
-                .collect();
-            if parts.len() == 1 {
-                q.must.push(Atom::Term(parts.into_iter().next().unwrap()));
-            } else if !parts.is_empty() {
-                q.must.push(Atom::Or(parts));
-            }
         } else {
-            q.must.push(Atom::Term(Pattern::new(t)));
+            push_must(&mut q, t);
         }
         i += 1;
     }
     q
 }
 
+fn push_must(q: &mut Query, t: &str) {
+    if t.contains('|') {
+        let parts: Vec<Pattern> = t
+            .split('|')
+            .filter(|s| !s.is_empty())
+            .map(Pattern::new)
+            .collect();
+        if parts.len() == 1 {
+            q.must.push(Atom::Term(parts.into_iter().next().unwrap()));
+        } else if !parts.is_empty() {
+            q.must.push(Atom::Or(parts));
+        }
+    } else {
+        q.must.push(Atom::Term(Pattern::new(t)));
+    }
+}
+
+fn strip_name_prefix(t: &str) -> Option<&str> {
+    strip_prefix_ci(t, "name:").or_else(|| strip_prefix_ci(t, "n:"))
+}
+
 fn is_filter(t: &str) -> bool {
     let l = t.to_ascii_lowercase();
-    l.starts_with("ext:") || l.starts_with("size:") || l.starts_with("dm:")
+    l.starts_with("ext:")
+        || l.starts_with("size:")
+        || l.starts_with("dm:")
+        || l.starts_with("name:")
+        || l.starts_with("n:")
+        || l.starts_with("file:")
+        || l.starts_with("folder:")
 }
 
 fn strip_prefix_ci<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
@@ -331,5 +369,53 @@ mod tests {
         assert_eq!(q.extensions, vec!["pdf".to_string()]);
         assert!(matches!(q.size, Some(SizeFilter::Gt(_))));
         assert_eq!(q.must_not.len(), 1);
+    }
+
+    #[test]
+    fn quoted_phrase_is_one_term() {
+        let q = parse_query("\"foo bar\" baz", now());
+        assert_eq!(q.must.len(), 2);
+        match &q.must[0] {
+            Atom::Term(p) => assert_eq!(p.raw, "foo bar"),
+            _ => panic!("expected quoted phrase as one term"),
+        }
+        match &q.must[1] {
+            Atom::Term(p) => assert_eq!(p.raw, "baz"),
+            _ => panic!("expected trailing term"),
+        }
+    }
+
+    #[test]
+    fn name_file_folder_modifiers() {
+        let n = parse_query("n:alpha", now());
+        assert!(n.name_only);
+        assert!(!n.files_only && !n.folders_only);
+        match &n.must[0] {
+            Atom::Term(p) => assert_eq!(p.raw, "alpha"),
+            _ => panic!("expected term"),
+        }
+
+        let name = parse_query("name:Alpha", now());
+        assert!(name.name_only);
+        match &name.must[0] {
+            Atom::Term(p) => assert_eq!(p.raw, "Alpha"),
+            _ => panic!("expected term"),
+        }
+
+        let f = parse_query("file:", now());
+        assert!(f.files_only);
+        assert!(!f.folders_only);
+        assert!(f.must.is_empty());
+
+        let attached = parse_query("file:report", now());
+        assert!(attached.files_only);
+        match &attached.must[0] {
+            Atom::Term(p) => assert_eq!(p.raw, "report"),
+            _ => panic!("expected term"),
+        }
+
+        let d = parse_query("folder:", now());
+        assert!(d.folders_only);
+        assert!(!d.files_only);
     }
 }
