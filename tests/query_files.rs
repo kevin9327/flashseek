@@ -86,23 +86,27 @@ fn files_is_a_filter_not_a_term() {
 }
 
 #[test]
-fn filename_is_not_a_file_filter() {
-    let q = parse_query("filename:", now());
+fn filex_is_not_a_file_filter() {
+    let q = parse_query("filex:", now());
     assert!(!q.files_only);
     assert!(!q.folders_only);
     assert_eq!(q.must.len(), 1);
     match &q.must[0] {
-        Atom::Term(p) => assert_eq!(p.raw, "filename:"),
+        Atom::Term(p) => assert_eq!(p.raw, "filex:"),
+        other => panic!("expected Term, got {other:?}"),
+    }
+
+    let q = parse_query("filex:work", now());
+    assert!(!q.files_only);
+    assert_eq!(q.must.len(), 1);
+    match &q.must[0] {
+        Atom::Term(p) => assert_eq!(p.raw, "filex:work"),
         other => panic!("expected Term, got {other:?}"),
     }
 
     let q = parse_query("filename:work", now());
     assert!(!q.files_only);
-    assert_eq!(q.must.len(), 1);
-    match &q.must[0] {
-        Atom::Term(p) => assert_eq!(p.raw, "filename:work"),
-        other => panic!("expected Term, got {other:?}"),
-    }
+    assert!(q.name_only);
 }
 
 #[test]
