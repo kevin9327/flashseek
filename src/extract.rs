@@ -26,7 +26,25 @@ fn skip_utf8_bom(bytes: &[u8]) -> &[u8] {
 
 fn read_plain_text(path: &Path) -> io::Result<String> {
     let bytes = fs::read(path)?;
-    String::from_utf8(skip_utf8_bom(&bytes).to_vec())
+    decode_plain_bytes(&bytes)
+}
+
+pub fn decode_plain_bytes(bytes: &[u8]) -> io::Result<String> {
+    if bytes.starts_with(&[0xFF, 0xFE]) && bytes.len() >= 2 {
+        let u16s: Vec<u16> = bytes[2..]
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
+        return Ok(String::from_utf16_lossy(&u16s));
+    }
+    if bytes.starts_with(&[0xFE, 0xFF]) && bytes.len() >= 2 {
+        let u16s: Vec<u16> = bytes[2..]
+            .chunks_exact(2)
+            .map(|c| u16::from_be_bytes([c[0], c[1]]))
+            .collect();
+        return Ok(String::from_utf16_lossy(&u16s));
+    }
+    String::from_utf8(skip_utf8_bom(bytes).to_vec())
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
 }
 
@@ -216,6 +234,16 @@ mod tests {
         assert!(is_extractable(Path::new("a.xml")));
         assert!(is_extractable(Path::new("a.toml")));
         assert!(is_extractable(Path::new("a.yaml")));
+    }
+
+    #[test]
+    #[test]
+    fn utf16_le_bom_decodes() {
+        let mut v = vec![0xFF, 0xFE];
+        for c in "세금".encode_utf16() {
+            v.extend_from_slice(&c.to_le_bytes());
+        }
+        assert_eq!(decode_plain_bytes(&v).unwrap(), "세금");
     }
 
     #[test]
