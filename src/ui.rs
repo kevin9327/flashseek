@@ -129,6 +129,15 @@ impl FlashseekApp {
 
 impl eframe::App for FlashseekApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
+            if let Some(i) = self.selected {
+                if let Some(hit) = self.hits.get(i) {
+                    open_path(&hit.record.path);
+                }
+            } else if let Some(hit) = self.hits.first() {
+                open_path(&hit.record.path);
+            }
+        }
         egui::TopBottomPanel::top("top").show(ctx, |ui| {
             ui.add_space(6.0);
             ui.horizontal(|ui| {
@@ -213,10 +222,7 @@ impl eframe::App for FlashseekApp {
                         self.selected = Some(i);
                     }
                     if resp.double_clicked() {
-                        let path = hit.record.path.clone();
-                        let _ = std::process::Command::new("cmd")
-                            .args(["/C", "start", "", &path.to_string_lossy()])
-                            .spawn();
+                        open_path(&hit.record.path);
                     }
                 }
             });
@@ -260,6 +266,12 @@ fn show_snippet(ui: &mut egui::Ui, sn: &crate::types::Snippet) {
         );
     }
     ui.label(job);
+}
+
+fn open_path(path: &std::path::Path) {
+    let _ = std::process::Command::new("cmd")
+        .args(["/C", "start", "", &path.to_string_lossy()])
+        .spawn();
 }
 
 fn is_image(path: &std::path::Path) -> bool {
