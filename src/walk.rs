@@ -51,6 +51,7 @@ fn walk(
         let modified = meta.modified().unwrap_or(SystemTime::UNIX_EPOCH);
         let size = if is_dir { 0 } else { meta.len() };
         let name = entry.file_name().to_string_lossy().into_owned();
+        let skip_children = is_dir && should_skip_dir_name(&name);
         let id = *next_id;
         *next_id += 1;
         let rec = FileRecord {
@@ -70,7 +71,7 @@ fn walk(
                 engine.content.index(path.clone(), body);
             }
         }
-        if is_dir {
+        if is_dir && !skip_children {
             walk(engine, &path, Some(id), content_roots, next_id)?;
         }
     }
@@ -100,6 +101,12 @@ pub fn should_index_content(size: u64, extractable: bool, under_root: bool) -> b
     extractable && under_root && size <= MAX_CONTENT_BYTES
 }
 
+/// Skip VCS and package trees so the name catalog stays useful.
+/// `name_root` itself is still walked even when it matches these names.
+pub fn should_skip_dir_name(name: &str) -> bool {
+    matches!(name, ".git" | ".svn" | ".hg") || name.eq_ignore_ascii_case("node_modules")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -110,5 +117,18 @@ mod tests {
         assert!(!should_index_content(MAX_CONTENT_BYTES + 1, true, true));
         assert!(!should_index_content(1024, false, true));
         assert!(!should_index_content(1024, true, false));
+    }
+
+    #[test]
+    fn skips_vcs_and_node_modules_dir_names() {
+        assert!(should_skip_dir_name(".git"));
+        assert!(should_skip_dir_name(".svn"));
+        assert!(should_skip_dir_name(".hg"));
+        assert!(should_skip_dir_name("node_modules"));
+        assert!(should_skip_dir_name("NODE_MODULES"));
+        assert!(should_skip_dir_name("Node_Modules"));
+        assert!(!should_skip_dir_name("keep.txt"));
+        assert!(!should_skip_dir_name(".gitignore"));
+        assert!(!should_skip_dir_name("src"));
     }
 }
