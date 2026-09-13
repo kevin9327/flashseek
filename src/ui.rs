@@ -6,6 +6,19 @@ use eframe::egui::{self, Color32, RichText};
 use crate::engine::Engine;
 use crate::types::Hit;
 
+/// Map a parsed config into the native window's name/content path fields.
+/// Multiple content roots are joined with `;`.
+pub fn apply_config_to_fields(cfg: &crate::EngineConfig) -> (String, String) {
+    let name_root = cfg.name_root.to_string_lossy().into_owned();
+    let content_root = cfg
+        .content_roots
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join(";");
+    (name_root, content_root)
+}
+
 pub fn run() -> eframe::Result<()> {
     let native = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -24,6 +37,7 @@ struct FlashseekApp {
     query: String,
     name_root: String,
     content_root: String,
+    config_path: String,
     status: String,
     engine: Option<Engine>,
     hits: Vec<Hit>,
@@ -39,6 +53,7 @@ impl Default for FlashseekApp {
             query: String::new(),
             name_root: home.clone(),
             content_root: docs.to_string_lossy().into_owned(),
+            config_path: String::new(),
             status: "Index a folder to search. Name root is the complete catalog; content root is body search only.".into(),
             engine: None,
             hits: Vec::new(),
@@ -49,10 +64,19 @@ impl Default for FlashseekApp {
 }
 
 impl FlashseekApp {
+    fn content_roots(&self) -> Vec<PathBuf> {
+        self.content_root
+            .split(';')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(PathBuf::from)
+            .collect()
+    }
+
     fn reindex(&mut self) {
         let name = PathBuf::from(self.name_root.trim());
-        let content = PathBuf::from(self.content_root.trim());
-        match Engine::from_roots(&name, &[content]) {
+        let content_roots = self.content_roots();
+        match Engine::from_roots(&name, &content_roots) {
             Ok(engine) => {
                 let n = engine.catalog.len();
                 self.status = format!("Indexed {n} names from {}", name.display());
@@ -62,6 +86,30 @@ impl FlashseekApp {
             Err(e) => {
                 self.status = format!("Index failed: {e}");
                 self.engine = None;
+            }
+        }
+    }
+
+    fn load_config(&mut self) {
+        let path = self.config_path.trim();
+        if path.is_empty() {
+            self.status = "Config path is empty.".into();
+            return;
+        }
+        match std::fs::read_to_string(path) {
+            Ok(text) => match crate::parse_engine_config(&text) {
+                Ok(cfg) => {
+                    let (name, content) = apply_config_to_fields(&cfg);
+                    self.name_root = name;
+                    self.content_root = content;
+                    self.reindex();
+                }
+                Err(e) => {
+                    self.status = format!("Config parse failed: {e}");
+                }
+            },
+            Err(e) => {
+                self.status = format!("Config read failed: {e}");
             }
         }
     }
@@ -103,6 +151,17 @@ impl eframe::App for FlashseekApp {
                     self.reindex();
                 }
                 ui.label(RichText::new(format!("{} hits", self.hits.len())).weak());
+            });
+            ui.horizontal(|ui| {
+                ui.label("Config");
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.config_path)
+                        .desired_width(280.0)
+                        .hint_text("name_root= / content_root= file"),
+                );
+                if ui.button("Load config").clicked() {
+                    self.load_config();
+                }
             });
             ui.label(RichText::new(&self.status).small().color(Color32::GRAY));
             ui.add_space(4.0);
@@ -208,4 +267,35 @@ fn is_image(path: &std::path::Path) -> bool {
         path.extension().and_then(|s| s.to_str()).map(|s| s.to_ascii_lowercase()).as_deref(),
         Some("png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp")
     )
+}
+
+#[cfg(all(test, feature = "ui"))]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    #[test]
+    fn apply_config_joins_content_roots() {
+        let cfg = crate::EngineConfig {
+            name_root: PathBuf::from(r"C:\"),
+            content_roots: vec![
+                PathBuf::from(r"C:\Users\a\Documents"),
+                PathBuf::from(r"C:\Users\a\Downloads"),
+            ],
+        };
+        let (name, content) = apply_config_to_fields(&cfg);
+        assert_eq!(name, r"C:\");
+        assert_eq!(content, r"C:\Users\a\Documents;C:\Users\a\Downloads");
+    }
+
+    #[test]
+    fn apply_config_empty_content_roots() {
+        let cfg = crate::EngineConfig {
+            name_root: PathBuf::from(r"D:\data"),
+            content_roots: vec![],
+        };
+        let (name, content) = apply_config_to_fields(&cfg);
+        assert_eq!(name, r"D:\data");
+        assert_eq!(content, "");
+    }
 }
