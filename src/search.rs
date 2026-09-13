@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Component, Path};
 use std::time::SystemTime;
 
 use crate::catalog::Catalog;
@@ -203,6 +203,11 @@ fn filters_ok(
             return false;
         }
     }
+    if let Some(depth) = query.depth {
+        if !depth.matches(path_depth(path)) {
+            return false;
+        }
+    }
     if let Some(after) = query.modified_after {
         if modified < after {
             return false;
@@ -225,6 +230,14 @@ fn filters_ok(
         }
     }
     true
+}
+
+/// Path components after the drive/root: skip Prefix and RootDir.
+/// `C:\a\b\c.txt` is 3 (`a`, `b`, `c.txt`), not 4 including the drive.
+fn path_depth(path: &Path) -> u64 {
+    path.components()
+        .filter(|c| !matches!(c, Component::Prefix(_) | Component::RootDir))
+        .count() as u64
 }
 
 /// Normalize `\`/`/` and compare case-insensitively (Windows paths).

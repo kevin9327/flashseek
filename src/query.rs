@@ -160,6 +160,8 @@ pub struct Query {
     pub size: Option<SizeFilter>,
     /// `len:` — basename character length (unicode scalars).
     pub name_len: Option<SizeFilter>,
+    /// `depth:` — path components after Prefix and RootDir (`C:\a\b\c.txt` is 3).
+    pub depth: Option<SizeFilter>,
     pub modified_after: Option<SystemTime>,
     pub modified_before: Option<SystemTime>,
     /// `n:` / `name:` — atoms may match the basename only, not path or body.
@@ -201,7 +203,7 @@ impl Query {
 }
 
 /// Everything-class operators: space=AND, `|=OR`, `!=NOT`, `*`/`?`,
-/// `ext:`, `size:`, `empty:`/`empty:yes` (size == 0), `len:`, `dm:`/`datemodified:`/`modified:`,
+/// `ext:`, `size:`, `empty:`/`empty:yes` (size == 0), `len:`, `depth:`, `dm:`/`datemodified:`/`modified:`,
 /// `n:`/`name:`, `file:`, `folder:`, `case:`,
 /// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`, `parent:`, `path:`,
 /// `content:`/`body:`, `startwith:`/`start:`, `endwith:`/`end:`,
@@ -230,6 +232,10 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
         } else if let Some(rest) = strip_prefix_ci(t, "len:") {
             if let Some(f) = parse_size(rest) {
                 q.name_len = Some(f);
+            }
+        } else if let Some(rest) = strip_prefix_ci(t, "depth:") {
+            if let Some(f) = parse_size(rest) {
+                q.depth = Some(f);
             }
         } else if let Some(rest) = strip_dm_prefix(t) {
             apply_dm(&mut q, rest, now);
@@ -403,6 +409,7 @@ fn is_filter(t: &str) -> bool {
         || l.starts_with("size:")
         || l.starts_with("empty:")
         || l.starts_with("len:")
+        || l.starts_with("depth:")
         || l.starts_with("datemodified:")
         || l.starts_with("modified:")
         || l.starts_with("dm:")
