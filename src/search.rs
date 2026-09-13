@@ -6,12 +6,45 @@ use crate::content::ContentIndex;
 use crate::nl::compile_nl;
 use crate::query::{Atom, Query};
 use crate::rank::rank_hits_with_terms;
-use crate::types::Hit;
+use crate::types::{FileRecord, Hit};
 
 pub fn search(catalog: &Catalog, content: &ContentIndex, query: &Query, now: SystemTime) -> Vec<Hit> {
     let terms = query.term_strings();
+    let mut hits = if let Some(prefix) = name_prefix_fast_path(query) {
+        collect_hits(
+            catalog.names_with_prefix(prefix).into_iter(),
+            content,
+            query,
+            &terms,
+        )
+    } else {
+        collect_hits(catalog.iter(), content, query, &terms)
+    };
+    rank_hits_with_terms(&mut hits, now, &terms);
+    hits
+}
+
+/// Prefix map is name-only and 1–3 chars; using it for path/body queries misses hits.
+fn name_prefix_fast_path(query: &Query) -> Option<&str> {
+    if !query.name_only {
+        return None;
+    }
+    match query.must.first() {
+        Some(Atom::Term(p)) if !p.glob && !p.regex && p.raw.chars().count() >= 2 => {
+            Some(p.raw.as_str())
+        }
+        _ => None,
+    }
+}
+
+fn collect_hits<'a>(
+    records: impl Iterator<Item = &'a FileRecord>,
+    content: &ContentIndex,
+    query: &Query,
+    terms: &[String],
+) -> Vec<Hit> {
     let mut hits = Vec::new();
-    for rec in catalog.iter() {
+    for rec in records {
         if !filters_ok(rec.path.as_path(), rec.size, rec.modified, rec.is_dir, query) {
             continue;
         }
@@ -50,9 +83,9 @@ pub fn search(catalog: &Catalog, content: &ContentIndex, query: &Query, now: Sys
             continue;
         }
         let snippet = if content_all {
-            content.snippet_for(&rec.path, &terms)
+            content.snippet_for(&rec.path, terms)
         } else if let Some(b) = body {
-            crate::content::make_snippet(b, &terms, 80)
+            crate::content::make_snippet(b, terms, 80)
         } else {
             None
         };
@@ -65,7 +98,6 @@ pub fn search(catalog: &Catalog, content: &ContentIndex, query: &Query, now: Sys
             snippet,
         });
     }
-    rank_hits_with_terms(&mut hits, now, &terms);
     hits
 }
 
