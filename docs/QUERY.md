@@ -20,6 +20,10 @@ Flashseek accepts Everything-class operators and Korean natural language. Both c
 - `parent:` / `path:` — parent folder equals / path contains
 - `attrib:R` `attrib:H` `attrib:D` — readonly, hidden, directory (`R|H` is any)
 - `sort:size` `sort:date` `sort:name` — replace score order
+- `count:N` / `max:N` — cap hits
+- `content:` / `body:` — token matches body only
+- `startwith:` / `endwith:` — basename prefix/suffix (`start:` / `end:` aliases)
+- `datemodified:` / `modified:` — aliases of `dm:`
 - `attrib:R` / `attrib:H` / `attrib:D` — readonly, hidden, directory (Windows file attributes)
 
 ## Korean
