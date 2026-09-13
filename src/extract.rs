@@ -4,7 +4,8 @@ use std::path::Path;
 
 const EXTRACTABLE: &[&str] = &[
     "txt", "md", "html", "htm", "xml", "pdf", "docx", "xlsx", "pptx", "csv", "json", "log",
-    "ini", "cfg", "toml", "yaml", "yml",
+    "ini", "cfg", "toml", "yaml", "yml", "rs", "py", "js", "ts", "tsx", "jsx", "go", "java",
+    "kt", "c", "h", "cpp", "cs", "rb", "php", "sh", "ps1",
 ];
 
 pub fn is_extractable(path: &Path) -> bool {
@@ -51,9 +52,9 @@ pub fn decode_plain_bytes(bytes: &[u8]) -> io::Result<String> {
 pub fn extract_text(path: &Path) -> io::Result<String> {
     let ext = ext_of(path).unwrap_or_default();
     match ext.as_str() {
-        "txt" | "md" | "csv" | "json" | "log" | "ini" | "cfg" | "toml" | "yaml" | "yml" => {
-            read_plain_text(path)
-        }
+        "txt" | "md" | "csv" | "json" | "log" | "ini" | "cfg" | "toml" | "yaml" | "yml" | "rs"
+        | "py" | "js" | "ts" | "tsx" | "jsx" | "go" | "java" | "kt" | "c" | "h" | "cpp" | "cs"
+        | "rb" | "php" | "sh" | "ps1" => read_plain_text(path),
         "html" | "htm" | "xml" => Ok(strip_html(&fs::read_to_string(path)?)),
         "pdf" => Ok(extract_pdf(&fs::read(path)?)),
         "docx" => extract_office(path, |n| n == "word/document.xml" || n.ends_with("/document.xml")),
@@ -234,6 +235,8 @@ mod tests {
         assert!(is_extractable(Path::new("a.xml")));
         assert!(is_extractable(Path::new("a.toml")));
         assert!(is_extractable(Path::new("a.yaml")));
+        assert!(is_extractable(Path::new("main.rs")));
+        assert!(is_extractable(Path::new("app.ts")));
     }
 
     #[test]
