@@ -203,6 +203,11 @@ fn filters_ok(
             return false;
         }
     }
+    if let Some(ext_len) = query.ext_len {
+        if !ext_len.matches(extension_len(name)) {
+            return false;
+        }
+    }
     if let Some(depth) = query.depth {
         if !depth.matches(path_depth(path)) {
             return false;
@@ -235,6 +240,15 @@ fn filters_ok(
         }
     }
     true
+}
+
+/// Characters after the last `.` in the basename, not including the dot.
+/// `foo.jpeg` is 4; no-dot names are 0.
+fn extension_len(name: &str) -> u64 {
+    match name.rsplit_once('.') {
+        Some((_, ext)) => ext.chars().count() as u64,
+        None => 0,
+    }
 }
 
 /// Path components after the drive/root: skip Prefix and RootDir.
