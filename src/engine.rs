@@ -5,7 +5,7 @@ use std::time::SystemTime;
 use crate::catalog::Catalog;
 use crate::content::ContentIndex;
 use crate::search::search_text;
-use crate::types::{CatalogEvent, FileRecord, Hit};
+use crate::types::{CatalogEvent, Hit};
 use crate::walk::ingest_tree;
 
 #[derive(Debug, Default, Clone)]
@@ -97,6 +97,7 @@ pub fn parse_engine_config(text: &str) -> io::Result<EngineConfig> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::FileRecord;
 
     #[test]
     fn parses_name_and_content_roots() {
