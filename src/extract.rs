@@ -5,7 +5,7 @@ use std::path::Path;
 const EXTRACTABLE: &[&str] = &[
     "txt", "md", "html", "htm", "xml", "pdf", "docx", "xlsx", "pptx", "csv", "json", "log",
     "ini", "cfg", "toml", "yaml", "yml", "rs", "py", "js", "ts", "tsx", "jsx", "go", "java",
-    "kt", "c", "h", "cpp", "cs", "rb", "php", "sh", "ps1", "rtf", "svg",
+    "kt", "c", "h", "cpp", "cs", "rb", "php", "sh", "ps1", "rtf", "svg", "vue", "svelte", "sql",
 ];
 
 pub fn is_extractable(path: &Path) -> bool {
@@ -54,7 +54,7 @@ pub fn extract_text(path: &Path) -> io::Result<String> {
     match ext.as_str() {
         "txt" | "md" | "csv" | "json" | "log" | "ini" | "cfg" | "toml" | "yaml" | "yml" | "rs"
         | "py" | "js" | "ts" | "tsx" | "jsx" | "go" | "java" | "kt" | "c" | "h" | "cpp" | "cs"
-        | "rb" | "php" | "sh" | "ps1" => read_plain_text(path),
+        | "rb" | "php" | "sh" | "ps1" | "vue" | "svelte" | "sql" => read_plain_text(path),
         "html" | "htm" | "xml" | "svg" => Ok(strip_html(&fs::read_to_string(path)?)),
         "rtf" => Ok(extract_rtf(&fs::read_to_string(path)?)),
         "pdf" => Ok(extract_pdf(&fs::read(path)?)),
