@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::time::{Duration, SystemTime};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -11,6 +12,8 @@ pub struct Pattern {
     pub prefix: bool,
     /// `endwith:` / `end:` — basename suffix instead of substring.
     pub suffix: bool,
+    /// `stem:` — substring on `Path::file_stem` (basename without extension).
+    pub stem_only: bool,
 }
 
 impl Pattern {
@@ -24,6 +27,7 @@ impl Pattern {
             content_only: false,
             prefix: false,
             suffix: false,
+            stem_only: false,
         }
     }
 
@@ -35,6 +39,7 @@ impl Pattern {
             content_only: false,
             prefix: false,
             suffix: false,
+            stem_only: false,
         }
     }
 
@@ -46,6 +51,7 @@ impl Pattern {
             content_only: false,
             prefix: true,
             suffix: false,
+            stem_only: false,
         }
     }
 
@@ -57,6 +63,19 @@ impl Pattern {
             content_only: false,
             prefix: false,
             suffix: true,
+            stem_only: false,
+        }
+    }
+
+    pub fn stem(raw: impl Into<String>) -> Self {
+        Pattern {
+            raw: raw.into(),
+            glob: false,
+            regex: false,
+            content_only: false,
+            prefix: false,
+            suffix: false,
+            stem_only: true,
         }
     }
 
@@ -73,6 +92,12 @@ impl Pattern {
             affix_match(text, &self.raw, case_sensitive, true)
         } else if self.suffix {
             affix_match(text, &self.raw, case_sensitive, false)
+        } else if self.stem_only {
+            let stem = Path::new(text)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("");
+            contains_match(stem, &self.raw, case_sensitive, whole_word)
         } else {
             contains_match(text, &self.raw, case_sensitive, whole_word)
         }
@@ -117,6 +142,14 @@ impl Atom {
         match self {
             Atom::Term(p) => p.prefix || p.suffix,
             Atom::Or(ps) => !ps.is_empty() && ps.iter().all(|p| p.prefix || p.suffix),
+        }
+    }
+
+    /// `stem:` — this atom matches the basename without extension only.
+    pub fn stem_only(&self) -> bool {
+        match self {
+            Atom::Term(p) => p.stem_only,
+            Atom::Or(ps) => !ps.is_empty() && ps.iter().all(|p| p.stem_only),
         }
     }
 }
@@ -209,7 +242,7 @@ impl Query {
 /// `empty:`/`empty:yes` (size == 0), `len:`, `depth:`, `dm:`/`datemodified:`/`modified:`,
 /// `n:`/`name:`/`filename:`/`basename:`, `file:`/`files:`, `folder:`/`dir:`, `case:`,
 /// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`/`S`, `hidden:`/`readonly:`/`system:` (empty rest), `parent:`, `path:`, `root:`,
-/// `content:`/`body:`, `startwith:`/`start:`, `endwith:`/`end:`,
+/// `content:`/`body:`, `startwith:`/`start:`, `endwith:`/`end:`, `stem:`,
 /// `sort:size`/`sort:date`/`sort:name`, `count:N`/`max:N`, `"quoted phrase"`.
 pub fn parse_query(input: &str, now: SystemTime) -> Query {
     let tokens = tokenize(input);
@@ -307,6 +340,10 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
             if !rest.is_empty() {
                 push_must(&mut q, t);
             }
+        } else if let Some(rest) = strip_stem_prefix(t) {
+            if !rest.is_empty() {
+                push_must(&mut q, t);
+            }
         } else if let Some(rest) = strip_prefix_ci(t, "sort:") {
             if let Some(mode) = parse_sort(rest) {
                 q.sort = mode;
@@ -381,6 +418,8 @@ fn parse_pattern(t: &str) -> Pattern {
         Pattern::prefix(rest)
     } else if let Some(rest) = strip_end_prefix(t) {
         Pattern::suffix(rest)
+    } else if let Some(rest) = strip_stem_prefix(t) {
+        Pattern::stem(rest)
     } else {
         Pattern::new(t)
     }
@@ -458,6 +497,10 @@ fn strip_start_prefix(t: &str) -> Option<&str> {
 
 fn strip_end_prefix(t: &str) -> Option<&str> {
     strip_prefix_ci(t, "endwith:").or_else(|| strip_prefix_ci(t, "end:"))
+}
+
+fn strip_stem_prefix(t: &str) -> Option<&str> {
+    strip_prefix_ci(t, "stem:")
 }
 
 fn is_filter(t: &str) -> bool {

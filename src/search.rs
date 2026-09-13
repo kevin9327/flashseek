@@ -72,7 +72,7 @@ fn collect_hits<'a>(
 
         if query.must_not.iter().any(|p| {
             let m = |s: &str| p.matches_with(s, query.case_sensitive, query.whole_word);
-            if p.prefix || p.suffix {
+            if p.prefix || p.suffix || p.stem_only {
                 m(name)
             } else {
                 m(name) || m(&path) || body.map(m).unwrap_or(false)
@@ -150,8 +150,8 @@ fn atom_match(
         return (false, false, c);
     }
     let n = atom.matches_text_with(name, cs, ww);
-    if atom.basename_affix() || query.name_only {
-        // Path and body must not satisfy `startwith:` / `endwith:` or `n:` / `name:`.
+    if atom.basename_affix() || atom.stem_only() || query.name_only {
+        // Path and body must not satisfy `startwith:` / `endwith:`, `stem:`, or `n:` / `name:`.
         return (n, false, false);
     }
     (
