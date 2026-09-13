@@ -153,6 +153,12 @@ impl eframe::App for FlashseekApp {
             let n = self.hits.len();
             self.selected = Some(self.selected.map(|i| (i + n - 1) % n).unwrap_or(n - 1));
         }
+        if ctx.input(|i| i.key_pressed(egui::Key::Home)) && !self.hits.is_empty() {
+            self.selected = Some(0);
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::End)) && !self.hits.is_empty() {
+            self.selected = Some(self.hits.len() - 1);
+        }
         if ctx.input(|i| i.key_pressed(egui::Key::Enter)) {
             if let Some(i) = self.selected {
                 if let Some(hit) = self.hits.get(i) {
