@@ -5,7 +5,7 @@ use crate::catalog::Catalog;
 use crate::content::ContentIndex;
 use crate::nl::compile_nl;
 use crate::query::{Atom, Query};
-use crate::rank::rank_hits;
+use crate::rank::rank_hits_with_terms;
 use crate::types::Hit;
 
 pub fn search(catalog: &Catalog, content: &ContentIndex, query: &Query, now: SystemTime) -> Vec<Hit> {
@@ -64,7 +64,7 @@ pub fn search(catalog: &Catalog, content: &ContentIndex, query: &Query, now: Sys
             snippet,
         });
     }
-    rank_hits(&mut hits, now);
+    rank_hits_with_terms(&mut hits, now, &terms);
     hits
 }
 

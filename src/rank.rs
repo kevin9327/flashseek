@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::time::{Duration, SystemTime};
 
 use crate::types::Hit;
@@ -5,13 +6,19 @@ use crate::types::Hit;
 const NAME_WEIGHT: f64 = 1000.0;
 const PATH_WEIGHT: f64 = 100.0;
 const CONTENT_WEIGHT: f64 = 10.0;
+const EXACT_BASENAME_WEIGHT: f64 = 200.0;
 const RECENCY_WEIGHT: f64 = 50.0;
 const RECENCY_WINDOW_SECS: f64 = 7.0 * 24.0 * 3600.0;
 
 /// Name hits outrank path hits; recency adds a decaying boost.
 pub fn rank_hits(hits: &mut [Hit], now: SystemTime) {
+    rank_hits_with_terms(hits, now, &[]);
+}
+
+/// Like [`rank_hits`], with an extra boost when the basename equals a query term.
+pub fn rank_hits_with_terms(hits: &mut [Hit], now: SystemTime, terms: &[String]) {
     for hit in hits.iter_mut() {
-        hit.score = score(hit, now);
+        hit.score = score(hit, now, terms);
     }
     hits.sort_by(|a, b| {
         b.score
@@ -21,7 +28,7 @@ pub fn rank_hits(hits: &mut [Hit], now: SystemTime) {
     });
 }
 
-pub fn score(hit: &Hit, now: SystemTime) -> f64 {
+pub fn score(hit: &Hit, now: SystemTime, terms: &[String]) -> f64 {
     let mut s = 0.0;
     if hit.name_match {
         s += NAME_WEIGHT;
@@ -31,6 +38,9 @@ pub fn score(hit: &Hit, now: SystemTime) -> f64 {
     if hit.content_match {
         s += CONTENT_WEIGHT;
     }
+    if exact_basename_match(&hit.record.name, terms) {
+        s += EXACT_BASENAME_WEIGHT;
+    }
     if let Ok(age) = now.duration_since(hit.record.modified) {
         let secs = age.as_secs_f64();
         if secs < RECENCY_WINDOW_SECS {
@@ -38,6 +48,14 @@ pub fn score(hit: &Hit, now: SystemTime) -> f64 {
         }
     }
     s
+}
+
+fn exact_basename_match(name: &str, terms: &[String]) -> bool {
+    let stem = Path::new(name)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or(name);
+    terms.iter().any(|term| stem.eq_ignore_ascii_case(term))
 }
 
 pub fn recency_window() -> Duration {
