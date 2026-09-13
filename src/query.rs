@@ -208,7 +208,7 @@ impl Query {
 /// `ext:`/`type:`, `pic:`/`video:`/`audio:`/`zip:`/`exe:`/`doc:` (set extension lists), `size:`,
 /// `empty:`/`empty:yes` (size == 0), `len:`, `depth:`, `dm:`/`datemodified:`/`modified:`,
 /// `n:`/`name:`, `file:`, `folder:`, `case:`,
-/// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`, `hidden:`/`readonly:` (empty rest), `parent:`, `path:`, `root:`,
+/// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`/`S`, `hidden:`/`readonly:`/`system:` (empty rest), `parent:`, `path:`, `root:`,
 /// `content:`/`body:`, `startwith:`/`start:`, `endwith:`/`end:`,
 /// `sort:size`/`sort:date`/`sort:name`, `count:N`/`max:N`, `"quoted phrase"`.
 pub fn parse_query(input: &str, now: SystemTime) -> Query {
@@ -278,6 +278,10 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
         } else if let Some(rest) = strip_prefix_ci(t, "readonly:") {
             if rest.is_empty() {
                 q.attrib_mask |= crate::types::ATTR_READONLY;
+            }
+        } else if let Some(rest) = strip_prefix_ci(t, "system:") {
+            if rest.is_empty() {
+                q.attrib_mask |= crate::types::ATTR_SYSTEM;
             }
         } else if let Some(rest) = strip_prefix_ci(t, "parent:") {
             if !rest.is_empty() {
@@ -472,6 +476,7 @@ fn is_filter(t: &str) -> bool {
         || l.starts_with("attrib:")
         || l.starts_with("hidden:")
         || l.starts_with("readonly:")
+        || l.starts_with("system:")
         || l.starts_with("parent:")
         || l.starts_with("path:")
         || l.starts_with("root:")
