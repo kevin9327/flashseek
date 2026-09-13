@@ -86,6 +86,13 @@ pub fn compile_nl(input: &str, now: SystemTime) -> Query {
             push_ext(&mut q, "flac");
             continue;
         }
+        if lower == "코드" || lower == "소스" {
+            push_ext(&mut q, "rs");
+            push_ext(&mut q, "py");
+            push_ext(&mut q, "js");
+            push_ext(&mut q, "ts");
+            continue;
+        }
         if lower == "문서" {
             // Hangul type word: documents → docx + pdf.
             push_ext(&mut q, "docx");
