@@ -203,7 +203,8 @@ impl Query {
 }
 
 /// Everything-class operators: space=AND, `|=OR`, `!=NOT`, `*`/`?`,
-/// `ext:`/`type:`, `size:`, `empty:`/`empty:yes` (size == 0), `len:`, `depth:`, `dm:`/`datemodified:`/`modified:`,
+/// `ext:`/`type:`, `pic:`/`video:`/`audio:` (set extension lists), `size:`,
+/// `empty:`/`empty:yes` (size == 0), `len:`, `depth:`, `dm:`/`datemodified:`/`modified:`,
 /// `n:`/`name:`, `file:`, `folder:`, `case:`,
 /// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`, `parent:`, `path:`,
 /// `content:`/`body:`, `startwith:`/`start:`, `endwith:`/`end:`,
@@ -215,11 +216,9 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
     while i < tokens.len() {
         let t = tokens[i].as_str();
         if let Some(rest) = strip_ext_prefix(t) {
-            q.extensions = rest
-                .split(';')
-                .map(|s| s.trim().trim_start_matches('.').to_ascii_lowercase())
-                .filter(|s| !s.is_empty())
-                .collect();
+            q.extensions = parse_ext_list(rest);
+        } else if let Some(list) = strip_ext_macro(t) {
+            q.extensions = parse_ext_list(list);
         } else if let Some(rest) = strip_prefix_ci(t, "size:") {
             if let Some(f) = parse_size(rest) {
                 q.size = Some(f);
@@ -373,6 +372,25 @@ fn strip_ext_prefix(t: &str) -> Option<&str> {
     strip_prefix_ci(t, "ext:").or_else(|| strip_prefix_ci(t, "type:"))
 }
 
+fn strip_ext_macro(t: &str) -> Option<&'static str> {
+    if strip_prefix_ci(t, "pic:").is_some() {
+        Some("jpg;jpeg;png;gif;bmp;webp")
+    } else if strip_prefix_ci(t, "video:").is_some() {
+        Some("mp4;mkv;avi;webm;mov")
+    } else if strip_prefix_ci(t, "audio:").is_some() {
+        Some("mp3;wav;flac;aac;ogg")
+    } else {
+        None
+    }
+}
+
+fn parse_ext_list(rest: &str) -> Vec<String> {
+    rest.split(';')
+        .map(|s| s.trim().trim_start_matches('.').to_ascii_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
 fn strip_name_prefix(t: &str) -> Option<&str> {
     strip_prefix_ci(t, "name:").or_else(|| strip_prefix_ci(t, "n:"))
 }
@@ -411,6 +429,9 @@ fn is_filter(t: &str) -> bool {
     let l = t.to_ascii_lowercase();
     l.starts_with("ext:")
         || l.starts_with("type:")
+        || l.starts_with("pic:")
+        || l.starts_with("video:")
+        || l.starts_with("audio:")
         || l.starts_with("size:")
         || l.starts_with("empty:")
         || l.starts_with("len:")
