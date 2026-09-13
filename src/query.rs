@@ -4,13 +4,26 @@ use std::time::{Duration, SystemTime};
 pub struct Pattern {
     pub raw: String,
     pub glob: bool,
+    pub regex: bool,
 }
 
 impl Pattern {
     pub fn new(raw: impl Into<String>) -> Self {
         let raw = raw.into();
         let glob = raw.contains('*') || raw.contains('?');
-        Pattern { raw, glob }
+        Pattern {
+            raw,
+            glob,
+            regex: false,
+        }
+    }
+
+    pub fn regex(raw: impl Into<String>) -> Self {
+        Pattern {
+            raw: raw.into(),
+            glob: false,
+            regex: true,
+        }
     }
 
     pub fn matches(&self, text: &str) -> bool {
@@ -18,7 +31,9 @@ impl Pattern {
     }
 
     pub fn matches_with(&self, text: &str, case_sensitive: bool, whole_word: bool) -> bool {
-        if self.glob {
+        if self.regex {
+            regex_match(&self.raw, text, case_sensitive)
+        } else if self.glob {
             glob_match(&self.raw, text, case_sensitive)
         } else {
             contains_match(text, &self.raw, case_sensitive, whole_word)
@@ -97,15 +112,19 @@ impl Query {
     pub fn term_strings(&self) -> Vec<String> {
         self.must
             .iter()
-            .flat_map(|a| a.terms().into_iter().map(|s| s.to_string()))
-            .filter(|s| !s.contains('*') && !s.contains('?'))
+            .flat_map(|a| match a {
+                Atom::Term(p) => vec![p],
+                Atom::Or(ps) => ps.iter().collect(),
+            })
+            .filter(|p| !p.glob && !p.regex)
+            .map(|p| p.raw.clone())
             .collect()
     }
 }
 
 /// Everything-class operators: space=AND, `|=OR`, `!=NOT`, `*`/`?`,
 /// `ext:`, `size:`, `dm:`, `n:`/`name:`, `file:`, `folder:`, `case:`,
-/// `ww:`/`wholeword:`, `"quoted phrase"`.
+/// `ww:`/`wholeword:`, `regex:`/`r:`, `"quoted phrase"`.
 pub fn parse_query(input: &str, now: SystemTime) -> Query {
     let tokens = tokenize(input);
     let mut q = Query::default();
@@ -149,11 +168,15 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
             if !rest.is_empty() {
                 push_must(&mut q, rest);
             }
+        } else if let Some(rest) = strip_regex_prefix(t) {
+            if !rest.is_empty() {
+                q.must.push(Atom::Term(Pattern::regex(rest)));
+            }
         } else if t == "|" {
             let next = tokens.get(i + 1).cloned();
             if let (Some(Atom::Term(prev)), Some(n)) = (q.must.pop(), next) {
                 if n != "|" && !n.starts_with('!') && !is_filter(&n) {
-                    q.must.push(Atom::Or(vec![prev, Pattern::new(n)]));
+                    q.must.push(Atom::Or(vec![prev, parse_pattern(&n)]));
                     i += 1;
                 } else {
                     q.must.push(Atom::Term(prev));
@@ -162,13 +185,13 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
         } else if t == "!" {
             if let Some(n) = tokens.get(i + 1) {
                 if !is_filter(n) {
-                    q.must_not.push(Pattern::new(n.clone()));
+                    q.must_not.push(parse_pattern(n));
                     i += 1;
                 }
             }
         } else if let Some(rest) = t.strip_prefix('!') {
             if !rest.is_empty() {
-                q.must_not.push(Pattern::new(rest));
+                q.must_not.push(parse_pattern(rest));
             }
         } else {
             push_must(&mut q, t);
@@ -183,7 +206,7 @@ fn push_must(q: &mut Query, t: &str) {
         let parts: Vec<Pattern> = t
             .split('|')
             .filter(|s| !s.is_empty())
-            .map(Pattern::new)
+            .map(parse_pattern)
             .collect();
         if parts.len() == 1 {
             q.must.push(Atom::Term(parts.into_iter().next().unwrap()));
@@ -191,7 +214,15 @@ fn push_must(q: &mut Query, t: &str) {
             q.must.push(Atom::Or(parts));
         }
     } else {
-        q.must.push(Atom::Term(Pattern::new(t)));
+        q.must.push(Atom::Term(parse_pattern(t)));
+    }
+}
+
+fn parse_pattern(t: &str) -> Pattern {
+    if let Some(rest) = strip_regex_prefix(t) {
+        Pattern::regex(rest)
+    } else {
+        Pattern::new(t)
     }
 }
 
@@ -201,6 +232,10 @@ fn strip_name_prefix(t: &str) -> Option<&str> {
 
 fn strip_ww_prefix(t: &str) -> Option<&str> {
     strip_prefix_ci(t, "wholeword:").or_else(|| strip_prefix_ci(t, "ww:"))
+}
+
+fn strip_regex_prefix(t: &str) -> Option<&str> {
+    strip_prefix_ci(t, "regex:").or_else(|| strip_prefix_ci(t, "r:"))
 }
 
 fn is_filter(t: &str) -> bool {
@@ -428,6 +463,75 @@ fn glob_rec(pat: &[char], text: &[char], case_sensitive: bool) -> bool {
     }
 }
 
+#[derive(Clone, Copy)]
+enum ReOp {
+    Any,
+    Lit(char),
+    StarAny,
+    StarLit(char),
+    Start,
+    End,
+}
+
+fn regex_match(pat: &str, text: &str, case_sensitive: bool) -> bool {
+    let ops = compile_re(pat);
+    let t: Vec<char> = text.chars().collect();
+    for i in 0..=t.len() {
+        if re_here(&ops, &t, i, case_sensitive) {
+            return true;
+        }
+    }
+    false
+}
+
+fn compile_re(pat: &str) -> Vec<ReOp> {
+    let mut ops = Vec::new();
+    for c in pat.chars() {
+        if c == '*' {
+            match ops.pop() {
+                Some(ReOp::Lit(ch)) => ops.push(ReOp::StarLit(ch)),
+                Some(ReOp::Any) => ops.push(ReOp::StarAny),
+                Some(prev) => ops.push(prev),
+                None => {}
+            }
+            continue;
+        }
+        ops.push(match c {
+            '.' => ReOp::Any,
+            '^' => ReOp::Start,
+            '$' => ReOp::End,
+            other => ReOp::Lit(other),
+        });
+    }
+    ops
+}
+
+fn re_here(ops: &[ReOp], text: &[char], pos: usize, case_sensitive: bool) -> bool {
+    match ops.first().copied() {
+        None => true,
+        Some(ReOp::Start) => pos == 0 && re_here(&ops[1..], text, pos, case_sensitive),
+        Some(ReOp::End) => pos == text.len() && re_here(&ops[1..], text, pos, case_sensitive),
+        Some(ReOp::Any) => {
+            pos < text.len() && re_here(&ops[1..], text, pos + 1, case_sensitive)
+        }
+        Some(ReOp::Lit(c)) => {
+            pos < text.len()
+                && chars_eq(c, text[pos], case_sensitive)
+                && re_here(&ops[1..], text, pos + 1, case_sensitive)
+        }
+        Some(ReOp::StarAny) => {
+            re_here(&ops[1..], text, pos, case_sensitive)
+                || (pos < text.len() && re_here(ops, text, pos + 1, case_sensitive))
+        }
+        Some(ReOp::StarLit(c)) => {
+            re_here(&ops[1..], text, pos, case_sensitive)
+                || (pos < text.len()
+                    && chars_eq(c, text[pos], case_sensitive)
+                    && re_here(ops, text, pos + 1, case_sensitive))
+        }
+    }
+}
+
 fn chars_eq(a: char, b: char, case_sensitive: bool) -> bool {
     if case_sensitive {
         a == b
@@ -559,5 +663,52 @@ mod tests {
         assert!(h.matches_with("한글.txt", false, true));
         assert!(h.matches_with("다른 한글 메모.txt", false, true));
         assert!(!h.matches_with("한글파일.txt", false, true));
+    }
+
+    #[test]
+    fn regex_prefix_compiles_and_matches() {
+        for input in ["regex:foo.*bar", "r:foo.*bar", "REGEX:foo.*bar", "R:foo.*bar"] {
+            let q = parse_query(input, now());
+            assert_eq!(q.must.len(), 1, "{input}");
+            match &q.must[0] {
+                Atom::Term(p) => {
+                    assert_eq!(p.raw, "foo.*bar", "{input}");
+                    assert!(p.regex, "{input}");
+                    assert!(!p.glob, "{input}");
+                }
+                other => panic!("{input}: expected Term, got {other:?}"),
+            }
+        }
+
+        let p = Pattern::regex("foo.*bar");
+        assert!(p.matches("fooXYZbar"));
+        assert!(p.matches("xxFOOyyBARzz"));
+        assert!(!p.matches("foo"));
+        assert!(!p.matches("barfoo"));
+
+        let p = Pattern::regex("^foo");
+        assert!(p.matches("foo.txt"));
+        assert!(!p.matches("xfoo.txt"));
+
+        let p = Pattern::regex("txt$");
+        assert!(p.matches("foo.txt"));
+        assert!(!p.matches("txt.log"));
+
+        let p = Pattern::regex("a.c");
+        assert!(p.matches("abc"));
+        assert!(p.matches("aXc"));
+        assert!(!p.matches("ac"));
+        assert!(!p.matches("abbc"));
+
+        let p = Pattern::regex("ab*c");
+        assert!(p.matches("ac"));
+        assert!(p.matches("abc"));
+        assert!(p.matches("abbbc"));
+        assert!(!p.matches("abXc"));
+
+        let p = Pattern::regex("Foo.*Bar");
+        assert!(p.matches("fooZZZbar"));
+        assert!(p.matches_with("FooZZZBar", true, false));
+        assert!(!p.matches_with("fooZZZbar", true, false));
     }
 }
