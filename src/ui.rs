@@ -54,7 +54,7 @@ impl Default for FlashseekApp {
             name_root: home.clone(),
             content_root: docs.to_string_lossy().into_owned(),
             config_path: String::new(),
-            status: "Index a folder to search. Name root is the complete catalog; content root is body search only.".into(),
+            status: "Index a folder. Enter opens, Esc clears, F5 reindexes, Ctrl+C copies path.".into(),
             engine: None,
             hits: Vec::new(),
             selected: None,
