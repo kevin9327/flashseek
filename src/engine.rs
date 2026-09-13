@@ -5,7 +5,7 @@ use std::time::SystemTime;
 use crate::catalog::Catalog;
 use crate::content::ContentIndex;
 use crate::search::search_text;
-use crate::types::{CatalogEvent, Hit};
+use crate::types::{CatalogEvent, FileRecord, Hit};
 use crate::walk::ingest_tree;
 
 #[derive(Debug, Default, Clone)]
@@ -33,6 +33,15 @@ impl Engine {
 
     pub fn apply(&mut self, event: CatalogEvent) {
         self.catalog.apply(event);
+    }
+
+    /// Index one file's body if it is extractable. Used after a live create.
+    pub fn index_path_body(&mut self, path: &Path) {
+        if crate::extract::is_extractable(path) {
+            if let Ok(body) = crate::extract::extract_text(path) {
+                self.content.index(path.to_path_buf(), body);
+            }
+        }
     }
 
     pub fn query(&self, input: &str, now: SystemTime) -> Vec<Hit> {
@@ -121,5 +130,27 @@ mod tests {
         .unwrap();
         let engine = Engine::from_config_file(&cfg_path).unwrap();
         assert!(engine.catalog.iter().any(|r| r.name == "hello.txt"));
+    }
+
+    #[test]
+    fn index_path_body_makes_body_searchable() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("secret.txt");
+        std::fs::write(&path, "bodytoken-xyz").unwrap();
+        let mut engine = Engine::new();
+        engine.index_path_body(&path);
+        let rec = FileRecord {
+            id: 1,
+            parent_id: None,
+            name: "secret.txt".into(),
+            path: path.clone(),
+            size: 13,
+            modified: SystemTime::now(),
+            is_dir: false,
+        };
+        engine.catalog.insert(rec);
+        let hits = engine.query("bodytoken-xyz", SystemTime::now());
+        assert_eq!(hits.len(), 1);
+        assert!(hits[0].content_match);
     }
 }
