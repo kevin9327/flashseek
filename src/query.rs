@@ -14,10 +14,14 @@ impl Pattern {
     }
 
     pub fn matches(&self, text: &str) -> bool {
+        self.matches_with(text, false, false)
+    }
+
+    pub fn matches_with(&self, text: &str, case_sensitive: bool, whole_word: bool) -> bool {
         if self.glob {
-            glob_ci(&self.raw, text)
+            glob_match(&self.raw, text, case_sensitive)
         } else {
-            contains_ci(text, &self.raw)
+            contains_match(text, &self.raw, case_sensitive, whole_word)
         }
     }
 }
@@ -30,9 +34,13 @@ pub enum Atom {
 
 impl Atom {
     pub fn matches_text(&self, text: &str) -> bool {
+        self.matches_text_with(text, false, false)
+    }
+
+    pub fn matches_text_with(&self, text: &str, case_sensitive: bool, whole_word: bool) -> bool {
         match self {
-            Atom::Term(p) => p.matches(text),
-            Atom::Or(ps) => ps.iter().any(|p| p.matches(text)),
+            Atom::Term(p) => p.matches_with(text, case_sensitive, whole_word),
+            Atom::Or(ps) => ps.iter().any(|p| p.matches_with(text, case_sensitive, whole_word)),
         }
     }
 
@@ -79,6 +87,10 @@ pub struct Query {
     pub files_only: bool,
     /// `folder:` — exclude files.
     pub folders_only: bool,
+    /// `case:` — match terms without lowercasing.
+    pub case_sensitive: bool,
+    /// `ww:` / `wholeword:` — match terms only at non-alphanumeric bounds.
+    pub whole_word: bool,
 }
 
 impl Query {
@@ -92,7 +104,8 @@ impl Query {
 }
 
 /// Everything-class operators: space=AND, `|=OR`, `!=NOT`, `*`/`?`,
-/// `ext:`, `size:`, `dm:`, `n:`/`name:`, `file:`, `folder:`, `"quoted phrase"`.
+/// `ext:`, `size:`, `dm:`, `n:`/`name:`, `file:`, `folder:`, `case:`,
+/// `ww:`/`wholeword:`, `"quoted phrase"`.
 pub fn parse_query(input: &str, now: SystemTime) -> Query {
     let tokens = tokenize(input);
     let mut q = Query::default();
@@ -123,6 +136,16 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
             }
         } else if let Some(rest) = strip_prefix_ci(t, "folder:") {
             q.folders_only = true;
+            if !rest.is_empty() {
+                push_must(&mut q, rest);
+            }
+        } else if let Some(rest) = strip_prefix_ci(t, "case:") {
+            q.case_sensitive = true;
+            if !rest.is_empty() {
+                push_must(&mut q, rest);
+            }
+        } else if let Some(rest) = strip_ww_prefix(t) {
+            q.whole_word = true;
             if !rest.is_empty() {
                 push_must(&mut q, rest);
             }
@@ -176,6 +199,10 @@ fn strip_name_prefix(t: &str) -> Option<&str> {
     strip_prefix_ci(t, "name:").or_else(|| strip_prefix_ci(t, "n:"))
 }
 
+fn strip_ww_prefix(t: &str) -> Option<&str> {
+    strip_prefix_ci(t, "wholeword:").or_else(|| strip_prefix_ci(t, "ww:"))
+}
+
 fn is_filter(t: &str) -> bool {
     let l = t.to_ascii_lowercase();
     l.starts_with("ext:")
@@ -185,6 +212,9 @@ fn is_filter(t: &str) -> bool {
         || l.starts_with("n:")
         || l.starts_with("file:")
         || l.starts_with("folder:")
+        || l.starts_with("case:")
+        || l.starts_with("ww:")
+        || l.starts_with("wholeword:")
 }
 
 fn strip_prefix_ci<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
@@ -323,21 +353,86 @@ pub fn contains_ci(hay: &str, needle: &str) -> bool {
     hay.to_lowercase().contains(&needle.to_lowercase())
 }
 
-fn glob_ci(pat: &str, text: &str) -> bool {
-    let p: Vec<char> = pat.chars().collect();
-    let t: Vec<char> = text.chars().collect();
-    glob_rec(&p, &t)
+fn contains_match(hay: &str, needle: &str, case_sensitive: bool, whole_word: bool) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    if !whole_word {
+        return if case_sensitive {
+            hay.contains(needle)
+        } else {
+            contains_ci(hay, needle)
+        };
+    }
+    whole_word_match(hay, needle, case_sensitive)
 }
 
-fn glob_rec(pat: &[char], text: &[char]) -> bool {
+fn whole_word_match(hay: &str, needle: &str, case_sensitive: bool) -> bool {
+    let hay_chars: Vec<char> = hay.chars().collect();
+    let needle_chars: Vec<char> = needle.chars().collect();
+    let nlen = needle_chars.len();
+    if nlen == 0 {
+        return true;
+    }
+    if hay_chars.len() < nlen {
+        return false;
+    }
+    for i in 0..=hay_chars.len() - nlen {
+        let window = &hay_chars[i..i + nlen];
+        let eq = if case_sensitive {
+            window == needle_chars.as_slice()
+        } else {
+            window
+                .iter()
+                .zip(needle_chars.iter())
+                .all(|(a, b)| eq_ci(*a, *b))
+        };
+        if !eq {
+            continue;
+        }
+        let left_ok = i == 0 || !is_word_char(hay_chars[i - 1]);
+        let right_ok = i + nlen == hay_chars.len() || !is_word_char(hay_chars[i + nlen]);
+        if left_ok && right_ok {
+            return true;
+        }
+    }
+    false
+}
+
+fn is_word_char(c: char) -> bool {
+    c.is_alphanumeric() || is_hangul_syllable(c)
+}
+
+fn is_hangul_syllable(c: char) -> bool {
+    matches!(c as u32, 0xAC00..=0xD7A3)
+}
+
+fn glob_match(pat: &str, text: &str, case_sensitive: bool) -> bool {
+    let p: Vec<char> = pat.chars().collect();
+    let t: Vec<char> = text.chars().collect();
+    glob_rec(&p, &t, case_sensitive)
+}
+
+fn glob_rec(pat: &[char], text: &[char], case_sensitive: bool) -> bool {
     match (pat.first().copied(), text.first().copied()) {
         (None, None) => true,
         (Some('*'), _) => {
-            glob_rec(&pat[1..], text) || (!text.is_empty() && glob_rec(pat, &text[1..]))
+            glob_rec(&pat[1..], text, case_sensitive)
+                || (!text.is_empty() && glob_rec(pat, &text[1..], case_sensitive))
         }
-        (Some('?'), Some(_)) => glob_rec(&pat[1..], &text[1..]),
-        (Some(pc), Some(tc)) if eq_ci(pc, tc) => glob_rec(&pat[1..], &text[1..]),
+        (Some('?'), Some(_)) => glob_rec(&pat[1..], &text[1..], case_sensitive),
+        (Some(pc), Some(tc)) if chars_eq(pc, tc, case_sensitive) => {
+            glob_rec(&pat[1..], &text[1..], case_sensitive)
+        }
         _ => false,
+    }
+}
+
+fn chars_eq(a: char, b: char, case_sensitive: bool) -> bool {
+    if case_sensitive {
+        a == b
+    } else {
+        eq_ci(a, b)
     }
 }
 
@@ -417,5 +512,52 @@ mod tests {
         let d = parse_query("folder:", now());
         assert!(d.folders_only);
         assert!(!d.files_only);
+    }
+
+    #[test]
+    fn case_and_whole_word_switches() {
+        let c = parse_query("case:", now());
+        assert!(c.case_sensitive);
+        assert!(!c.whole_word);
+        assert!(c.must.is_empty());
+
+        let attached = parse_query("case:Foo", now());
+        assert!(attached.case_sensitive);
+        match &attached.must[0] {
+            Atom::Term(p) => assert_eq!(p.raw, "Foo"),
+            _ => panic!("expected term"),
+        }
+
+        let ww = parse_query("ww:", now());
+        assert!(ww.whole_word);
+        assert!(!ww.case_sensitive);
+
+        let whole = parse_query("wholeword:bar", now());
+        assert!(whole.whole_word);
+        match &whole.must[0] {
+            Atom::Term(p) => assert_eq!(p.raw, "bar"),
+            _ => panic!("expected term"),
+        }
+    }
+
+    #[test]
+    fn pattern_honors_case_and_whole_word() {
+        let p = Pattern::new("Foo");
+        assert!(p.matches("xxfooYY"));
+        assert!(p.matches_with("xxFooYY", true, false));
+        assert!(!p.matches_with("xxfooYY", true, false));
+
+        let p = Pattern::new("report");
+        assert!(p.matches("reporting.txt"));
+        assert!(p.matches_with("alpha-report.txt", false, true));
+        assert!(p.matches_with("report.txt", false, true));
+        assert!(!p.matches_with("reporting.txt", false, true));
+        assert!(!p.matches_with("myreport.txt", false, true));
+
+        let h = Pattern::new("한글");
+        assert!(h.matches("한글파일.txt"));
+        assert!(h.matches_with("한글.txt", false, true));
+        assert!(h.matches_with("다른 한글 메모.txt", false, true));
+        assert!(!h.matches_with("한글파일.txt", false, true));
     }
 }

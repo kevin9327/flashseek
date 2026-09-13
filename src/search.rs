@@ -20,7 +20,8 @@ pub fn search(catalog: &Catalog, content: &ContentIndex, query: &Query, now: Sys
         let body = content.body(&rec.path);
 
         if query.must_not.iter().any(|p| {
-            p.matches(name) || p.matches(&path) || body.map(|b| p.matches(b)).unwrap_or(false)
+            let m = |s: &str| p.matches_with(s, query.case_sensitive, query.whole_word);
+            m(name) || m(&path) || body.map(m).unwrap_or(false)
         }) {
             continue;
         }
@@ -35,7 +36,7 @@ pub fn search(catalog: &Catalog, content: &ContentIndex, query: &Query, now: Sys
             content_all = false;
         } else {
             for atom in &query.must {
-                let (n, p, c) = atom_match(atom, name, &path, body, query.name_only);
+                let (n, p, c) = atom_match(atom, name, &path, body, query);
                 if !(n || p || c) {
                     ok = false;
                     break;
@@ -83,17 +84,18 @@ fn atom_match(
     name: &str,
     path: &str,
     body: Option<&str>,
-    name_only: bool,
+    query: &Query,
 ) -> (bool, bool, bool) {
-    let n = atom.matches_text(name);
-    if name_only {
+    let n = atom.matches_text_with(name, query.case_sensitive, query.whole_word);
+    if query.name_only {
         // Path and body must not satisfy the atom when `n:` / `name:` is set.
         return (n, false, false);
     }
     (
         n,
-        atom.matches_text(path),
-        body.map(|b| atom.matches_text(b)).unwrap_or(false),
+        atom.matches_text_with(path, query.case_sensitive, query.whole_word),
+        body.map(|b| atom.matches_text_with(b, query.case_sensitive, query.whole_word))
+            .unwrap_or(false),
     )
 }
 
