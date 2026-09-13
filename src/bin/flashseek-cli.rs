@@ -5,10 +5,11 @@ use std::time::{Duration, SystemTime};
 use flashseek::{Engine, Hit, HitJson};
 
 const HELP: &str = "\
-flashseek-cli --name-root DIR --content-root DIR --query TEXT [--json] [--now-epoch-secs N] [--out PATH] [--max-results N] [--files-only] [--folders-only]
+flashseek-cli --name-root DIR --content-root DIR --query TEXT [--json] [--now-epoch-secs N] [--out PATH] [--max-results N] [--files-only] [--folders-only] [--config FILE]
   --max-results N  max hits after search (0 = unlimited)
   --files-only     keep files only
   --folders-only   keep folders only
+  --config FILE    name_root=/ content_root=/ lines; flags override
 ";
 
 #[derive(Debug)]
@@ -24,6 +25,7 @@ struct Cli {
     files_only: bool,
     folders_only: bool,
     help: bool,
+    config_path: Option<PathBuf>,
 }
 
 impl Default for Cli {
@@ -39,6 +41,7 @@ impl Default for Cli {
             files_only: false,
             folders_only: false,
             help: false,
+            config_path: None,
         }
     }
 }
@@ -84,6 +87,10 @@ fn parse_args(args: &[String]) -> Result<Cli, String> {
             }
             "--files-only" => cli.files_only = true,
             "--folders-only" => cli.folders_only = true,
+            "--config" => {
+                i += 1;
+                cli.config_path = args.get(i).map(PathBuf::from);
+            }
             "-h" | "--help" => {
                 cli.help = true;
                 return Ok(cli);
@@ -123,13 +130,37 @@ fn main() -> ExitCode {
         eprintln!("{HELP}");
         return ExitCode::SUCCESS;
     }
-    let Some(name_root) = cli.name_root.clone() else {
-        eprintln!("--name-root is required");
-        return ExitCode::from(2);
-    };
-    let content_roots = match cli.content_root.clone() {
+    let mut name_root = cli.name_root.clone();
+    let mut content_roots = match cli.content_root.clone() {
         Some(p) => vec![p],
         None => Vec::new(),
+    };
+    if let Some(cfg_path) = &cli.config_path {
+        let text = match std::fs::read_to_string(cfg_path) {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("config {}: {e}", cfg_path.display());
+                return ExitCode::from(2);
+            }
+        };
+        match flashseek::parse_engine_config(&text) {
+            Ok(cfg) => {
+                if name_root.is_none() {
+                    name_root = Some(cfg.name_root);
+                }
+                if content_roots.is_empty() {
+                    content_roots = cfg.content_roots;
+                }
+            }
+            Err(e) => {
+                eprintln!("config parse: {e}");
+                return ExitCode::from(2);
+            }
+        }
+    }
+    let Some(name_root) = name_root else {
+        eprintln!("--name-root is required (or set it in --config)");
+        return ExitCode::from(2);
     };
     let engine = match Engine::from_roots(&name_root, &content_roots) {
         Ok(e) => e,
@@ -280,6 +311,14 @@ mod tests {
         assert!(HELP.contains("--max-results"));
         assert!(HELP.contains("--files-only"));
         assert!(HELP.contains("--folders-only"));
+        assert!(HELP.contains("--config"));
+    }
+
+    #[test]
+    fn config_flag_parses() {
+        let cli = parse_args(&args(&["--config", "C:\\flashseek.conf", "--query", "pdf"])).unwrap();
+        assert_eq!(cli.config_path.unwrap(), PathBuf::from("C:\\flashseek.conf"));
+        assert_eq!(cli.query, "pdf");
     }
 
     #[test]

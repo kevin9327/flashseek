@@ -17,7 +17,7 @@ pub mod ui;
 
 pub use catalog::Catalog;
 pub use content::ContentIndex;
-pub use engine::Engine;
+pub use engine::{parse_engine_config, Engine, EngineConfig};
 pub use extract::extract_text;
 pub use nl::compile_nl;
 pub use query::{parse_query, Query};

@@ -24,7 +24,13 @@ Windows instant file search. Name catalog is Everything-class (complete tree, li
 Headless (this is the proof path):
 
 ```
-flashseek-cli --name-root C:\ --content-root C:\Users\you\Documents --query "지난주 세금 pdf" --json
+flashseek-cli --name-root C:\ --content-root C:\Users\you\Documents --query "지난주 세금 pdf" --json --out hits.json
+```
+
+Config file (`name_root=` / `content_root=` lines):
+
+```
+flashseek-cli --config %USERPROFILE%\flashseek.conf --query "invoice ext:pdf" --files-only --max-results 20
 ```
 
 Window (native, not a webview):
