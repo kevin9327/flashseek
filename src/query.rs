@@ -168,7 +168,7 @@ pub struct Query {
     pub name_only: bool,
     /// `file:` — exclude directories.
     pub files_only: bool,
-    /// `folder:` — exclude files.
+    /// `folder:` / `dir:` — exclude files.
     pub folders_only: bool,
     /// `case:` — match terms without lowercasing.
     pub case_sensitive: bool,
@@ -207,7 +207,7 @@ impl Query {
 /// Everything-class operators: space=AND, `|=OR`, `!=NOT`, `*`/`?`,
 /// `ext:`/`type:`, `pic:`/`video:`/`audio:`/`zip:`/`exe:`/`doc:` (set extension lists), `size:`,
 /// `empty:`/`empty:yes` (size == 0), `len:`, `depth:`, `dm:`/`datemodified:`/`modified:`,
-/// `n:`/`name:`, `file:`, `folder:`, `case:`,
+/// `n:`/`name:`, `file:`, `folder:`/`dir:`, `case:`,
 /// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`/`S`, `hidden:`/`readonly:`/`system:` (empty rest), `parent:`, `path:`, `root:`,
 /// `content:`/`body:`, `startwith:`/`start:`, `endwith:`/`end:`,
 /// `sort:size`/`sort:date`/`sort:name`, `count:N`/`max:N`, `"quoted phrase"`.
@@ -250,7 +250,7 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
             if !rest.is_empty() {
                 push_must(&mut q, rest);
             }
-        } else if let Some(rest) = strip_prefix_ci(t, "folder:") {
+        } else if let Some(rest) = strip_folder_prefix(t) {
             q.folders_only = true;
             if !rest.is_empty() {
                 push_must(&mut q, rest);
@@ -419,6 +419,10 @@ fn strip_name_prefix(t: &str) -> Option<&str> {
     strip_prefix_ci(t, "name:").or_else(|| strip_prefix_ci(t, "n:"))
 }
 
+fn strip_folder_prefix(t: &str) -> Option<&str> {
+    strip_prefix_ci(t, "folder:").or_else(|| strip_prefix_ci(t, "dir:"))
+}
+
 fn strip_dm_prefix(t: &str) -> Option<&str> {
     strip_prefix_ci(t, "datemodified:")
         .or_else(|| strip_prefix_ci(t, "modified:"))
@@ -470,6 +474,7 @@ fn is_filter(t: &str) -> bool {
         || l.starts_with("n:")
         || l.starts_with("file:")
         || l.starts_with("folder:")
+        || l.starts_with("dir:")
         || l.starts_with("case:")
         || l.starts_with("ww:")
         || l.starts_with("wholeword:")
