@@ -40,6 +40,12 @@ fn code_word_sets_source_extensions() {
 }
 
 #[test]
+fn archive_word_sets_zip_extensions() {
+    let q = compile_nl("압축 백업", now());
+    assert!(q.extensions.contains(&"zip".to_string()));
+}
+
+#[test]
 fn last_week_tax_pdf_still_compiles() {
     let q = compile_nl("지난주 세금 pdf", now());
     assert_eq!(q.extensions, vec!["pdf".to_string()]);

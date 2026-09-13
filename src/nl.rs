@@ -86,6 +86,12 @@ pub fn compile_nl(input: &str, now: SystemTime) -> Query {
             push_ext(&mut q, "flac");
             continue;
         }
+        if lower == "압축" || lower == "아카이브" {
+            push_ext(&mut q, "zip");
+            push_ext(&mut q, "7z");
+            push_ext(&mut q, "rar");
+            continue;
+        }
         if lower == "코드" || lower == "소스" {
             push_ext(&mut q, "rs");
             push_ext(&mut q, "py");
