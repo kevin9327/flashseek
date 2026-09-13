@@ -22,10 +22,10 @@ pub fn compile_nl(input: &str, now: SystemTime) -> Query {
 
     let tokens = tokenize(trimmed);
     let mut q = Query::default();
-    let mut skip_next_ju = false;
+    let mut skip_next = false;
     for (i, tok) in tokens.iter().enumerate() {
-        if skip_next_ju {
-            skip_next_ju = false;
+        if skip_next {
+            skip_next = false;
             continue;
         }
         let lower = tok.to_lowercase();
@@ -36,7 +36,7 @@ pub fn compile_nl(input: &str, now: SystemTime) -> Query {
         if lower == "지난" {
             if tokens.get(i + 1).map(|s| s.as_str()) == Some("주") {
                 q.modified_after = now.checked_sub(Duration::from_secs(7 * 24 * 3600));
-                skip_next_ju = true;
+                skip_next = true;
                 continue;
             }
         }
@@ -47,6 +47,35 @@ pub fn compile_nl(input: &str, now: SystemTime) -> Query {
         if lower == "어제" {
             q.modified_after = now.checked_sub(Duration::from_secs(48 * 3600));
             q.modified_before = now.checked_sub(Duration::from_secs(24 * 3600));
+            continue;
+        }
+        if lower == "이번달" {
+            q.modified_after = now.checked_sub(Duration::from_secs(30 * 24 * 3600));
+            continue;
+        }
+        if lower == "이번" {
+            if tokens.get(i + 1).map(|s| s.as_str()) == Some("달") {
+                q.modified_after = now.checked_sub(Duration::from_secs(30 * 24 * 3600));
+                skip_next = true;
+                continue;
+            }
+        }
+        if lower == "올해" {
+            q.modified_after = now.checked_sub(Duration::from_secs(365 * 24 * 3600));
+            continue;
+        }
+        if lower == "문서" {
+            // Hangul type word: documents → docx + pdf.
+            push_ext(&mut q, "docx");
+            push_ext(&mut q, "pdf");
+            continue;
+        }
+        if lower == "스프레드시트" {
+            push_ext(&mut q, "xlsx");
+            continue;
+        }
+        if lower == "슬라이드" {
+            push_ext(&mut q, "pptx");
             continue;
         }
         if let Some(rest) = strip_prefix_ci(tok, "ext:") {
@@ -72,14 +101,18 @@ pub fn compile_nl(input: &str, now: SystemTime) -> Query {
         }
         let ext_tok = tok.trim_start_matches('.').to_ascii_lowercase();
         if KNOWN_EXT.contains(&ext_tok.as_str()) {
-            if !q.extensions.contains(&ext_tok) {
-                q.extensions.push(ext_tok);
-            }
+            push_ext(&mut q, &ext_tok);
             continue;
         }
         q.must.push(Atom::Term(Pattern::new(tok.clone())));
     }
     q
+}
+
+fn push_ext(q: &mut Query, ext: &str) {
+    if !q.extensions.iter().any(|e| e == ext) {
+        q.extensions.push(ext.to_string());
+    }
 }
 
 fn looks_structured(s: &str) -> bool {
@@ -127,5 +160,63 @@ mod tests {
         assert_eq!(q.extensions, vec!["docx".to_string()]);
         assert!(q.size.is_some());
         assert!(q.modified_after.is_some());
+    }
+
+    #[test]
+    fn korean_date_windows_and_type_words() {
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_800_000_000);
+
+        let today = compile_nl("오늘", now);
+        assert_eq!(
+            now.duration_since(today.modified_after.unwrap())
+                .unwrap()
+                .as_secs(),
+            24 * 3600
+        );
+        assert!(today.modified_before.is_none());
+
+        let yest = compile_nl("어제", now);
+        assert_eq!(
+            now.duration_since(yest.modified_after.unwrap())
+                .unwrap()
+                .as_secs(),
+            48 * 3600
+        );
+        assert_eq!(
+            now.duration_since(yest.modified_before.unwrap())
+                .unwrap()
+                .as_secs(),
+            24 * 3600
+        );
+
+        for input in ["이번달", "이번 달"] {
+            let q = compile_nl(input, now);
+            assert_eq!(
+                now.duration_since(q.modified_after.unwrap())
+                    .unwrap()
+                    .as_secs(),
+                30 * 24 * 3600,
+                "{input}"
+            );
+            assert!(q.must.is_empty(), "{input} must not keep 달 as a term");
+        }
+
+        let year = compile_nl("올해", now);
+        assert_eq!(
+            now.duration_since(year.modified_after.unwrap())
+                .unwrap()
+                .as_secs(),
+            365 * 24 * 3600
+        );
+
+        let docs = compile_nl("문서", now);
+        assert_eq!(docs.extensions, vec!["docx".to_string(), "pdf".to_string()]);
+        assert!(docs.must.is_empty());
+
+        let sheet = compile_nl("스프레드시트", now);
+        assert_eq!(sheet.extensions, vec!["xlsx".to_string()]);
+
+        let slides = compile_nl("슬라이드", now);
+        assert_eq!(slides.extensions, vec!["pptx".to_string()]);
     }
 }
