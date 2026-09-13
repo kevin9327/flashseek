@@ -3,9 +3,14 @@ use std::path::Path;
 
 use crate::types::{CatalogEvent, FileRecord};
 
+/// First 1–3 lowercase chars of a name; used as prefix-map keys.
+const PREFIX_MAX_CHARS: usize = 3;
+
 #[derive(Debug, Default, Clone)]
 pub struct Catalog {
     by_id: HashMap<u64, FileRecord>,
+    /// Optional name index: lowercase prefixes (1–3 chars) → record ids.
+    by_prefix: HashMap<String, Vec<u64>>,
 }
 
 impl Catalog {
@@ -22,6 +27,10 @@ impl Catalog {
     }
 
     pub fn insert(&mut self, rec: FileRecord) {
+        if let Some(old) = self.by_id.remove(&rec.id) {
+            self.unindex_name(old.id, &old.name);
+        }
+        self.index_name(rec.id, &rec.name);
         self.by_id.insert(rec.id, rec);
     }
 
@@ -41,30 +50,54 @@ impl Catalog {
         self.by_id.values().find(|r| r.path == path)
     }
 
+    /// Candidates whose names start with `prefix` (1–3 chars, case-insensitive).
+    /// Longer prefixes still filter against the full string after a 1–3 char lookup.
+    pub fn names_with_prefix(&self, prefix: &str) -> Vec<&FileRecord> {
+        let needle = prefix.to_ascii_lowercase();
+        if needle.is_empty() {
+            return Vec::new();
+        }
+        let key: String = needle.chars().take(PREFIX_MAX_CHARS).collect();
+        let Some(ids) = self.by_prefix.get(&key) else {
+            return Vec::new();
+        };
+        ids.iter()
+            .filter_map(|id| self.by_id.get(id))
+            .filter(|rec| rec.name.to_ascii_lowercase().starts_with(&needle))
+            .collect()
+    }
+
     /// Live updates: after create/delete/rename the next query sees the new catalog.
     pub fn apply(&mut self, event: CatalogEvent) {
         match event {
             CatalogEvent::Create(rec) => {
-                self.by_id.insert(rec.id, rec);
+                self.insert(rec);
             }
             CatalogEvent::Delete { id } => {
-                self.by_id.remove(&id);
+                if let Some(old) = self.by_id.remove(&id) {
+                    self.unindex_name(old.id, &old.name);
+                }
             }
             CatalogEvent::Rename {
                 id,
                 new_name,
                 new_path,
             } => {
-                let (old_path, is_dir) = {
+                let (old_path, old_name, is_dir) = {
                     let Some(rec) = self.by_id.get_mut(&id) else {
                         return;
                     };
                     let old_path = rec.path.clone();
+                    let old_name = rec.name.clone();
                     let is_dir = rec.is_dir;
-                    rec.name = new_name;
+                    rec.name = new_name.clone();
                     rec.path = new_path.clone();
-                    (old_path, is_dir)
+                    (old_path, old_name, is_dir)
                 };
+                if old_name != new_name {
+                    self.unindex_name(id, &old_name);
+                    self.index_name(id, &new_name);
+                }
                 // Directory rename rewrites descendant path prefixes so children stay under the new location.
                 if is_dir {
                     for rec in self.by_id.values_mut() {
@@ -79,6 +112,38 @@ impl Catalog {
             }
         }
     }
+
+    fn index_name(&mut self, id: u64, name: &str) {
+        for prefix in name_prefixes(name) {
+            let bucket = self.by_prefix.entry(prefix).or_default();
+            if !bucket.contains(&id) {
+                bucket.push(id);
+            }
+        }
+    }
+
+    fn unindex_name(&mut self, id: u64, name: &str) {
+        for prefix in name_prefixes(name) {
+            let empty = match self.by_prefix.get_mut(&prefix) {
+                Some(bucket) => {
+                    bucket.retain(|&existing| existing != id);
+                    bucket.is_empty()
+                }
+                None => false,
+            };
+            if empty {
+                self.by_prefix.remove(&prefix);
+            }
+        }
+    }
+}
+
+fn name_prefixes(name: &str) -> Vec<String> {
+    let lower = name.to_ascii_lowercase();
+    let chars: Vec<char> = lower.chars().take(PREFIX_MAX_CHARS).collect();
+    (1..=chars.len())
+        .map(|n| chars[..n].iter().collect())
+        .collect()
 }
 
 #[cfg(test)]
