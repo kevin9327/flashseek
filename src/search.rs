@@ -131,16 +131,24 @@ fn atom_match(
     body: Option<&str>,
     query: &Query,
 ) -> (bool, bool, bool) {
-    let n = atom.matches_text_with(name, query.case_sensitive, query.whole_word);
+    let cs = query.case_sensitive;
+    let ww = query.whole_word;
+    if atom.content_only() {
+        // `content:` / `body:` — name and path must not satisfy the atom.
+        let c = body
+            .map(|b| atom.matches_text_with(b, cs, ww))
+            .unwrap_or(false);
+        return (false, false, c);
+    }
+    let n = atom.matches_text_with(name, cs, ww);
     if query.name_only {
         // Path and body must not satisfy the atom when `n:` / `name:` is set.
         return (n, false, false);
     }
     (
         n,
-        atom.matches_text_with(path, query.case_sensitive, query.whole_word),
-        body.map(|b| atom.matches_text_with(b, query.case_sensitive, query.whole_word))
-            .unwrap_or(false),
+        atom.matches_text_with(path, cs, ww),
+        body.map(|b| atom.matches_text_with(b, cs, ww)).unwrap_or(false),
     )
 }
 

@@ -5,6 +5,8 @@ pub struct Pattern {
     pub raw: String,
     pub glob: bool,
     pub regex: bool,
+    /// `content:` / `body:` — match this pattern against the file body only.
+    pub content_only: bool,
 }
 
 impl Pattern {
@@ -15,6 +17,7 @@ impl Pattern {
             raw,
             glob,
             regex: false,
+            content_only: false,
         }
     }
 
@@ -23,6 +26,7 @@ impl Pattern {
             raw: raw.into(),
             glob: false,
             regex: true,
+            content_only: false,
         }
     }
 
@@ -63,6 +67,14 @@ impl Atom {
         match self {
             Atom::Term(p) => vec![p.raw.as_str()],
             Atom::Or(ps) => ps.iter().map(|p| p.raw.as_str()).collect(),
+        }
+    }
+
+    /// `content:` / `body:` — this atom matches the file body only.
+    pub fn content_only(&self) -> bool {
+        match self {
+            Atom::Term(p) => p.content_only,
+            Atom::Or(ps) => !ps.is_empty() && ps.iter().all(|p| p.content_only),
         }
     }
 }
@@ -147,7 +159,7 @@ impl Query {
 /// Everything-class operators: space=AND, `|=OR`, `!=NOT`, `*`/`?`,
 /// `ext:`, `size:`, `dm:`/`datemodified:`/`modified:`, `n:`/`name:`, `file:`, `folder:`, `case:`,
 /// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`, `parent:`, `path:`,
-/// `sort:size`/`sort:date`/`sort:name`, `count:N`/`max:N`, `"quoted phrase"`.
+/// `content:`/`body:`, `sort:size`/`sort:date`/`sort:name`, `count:N`/`max:N`, `"quoted phrase"`.
 pub fn parse_query(input: &str, now: SystemTime) -> Query {
     let tokens = tokenize(input);
     let mut q = Query::default();
@@ -205,6 +217,10 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
             if !rest.is_empty() {
                 q.path_contains = Some(rest.to_string());
             }
+        } else if let Some(rest) = strip_content_prefix(t) {
+            if !rest.is_empty() {
+                push_must_content(&mut q, rest);
+            }
         } else if let Some(rest) = strip_prefix_ci(t, "sort:") {
             if let Some(mode) = parse_sort(rest) {
                 q.sort = mode;
@@ -243,11 +259,24 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
 }
 
 fn push_must(q: &mut Query, t: &str) {
+    push_must_with(q, t, false);
+}
+
+fn push_must_content(q: &mut Query, t: &str) {
+    push_must_with(q, t, true);
+}
+
+fn push_must_with(q: &mut Query, t: &str, content_only: bool) {
+    let mark = |mut p: Pattern| {
+        p.content_only = content_only;
+        p
+    };
     if t.contains('|') {
         let parts: Vec<Pattern> = t
             .split('|')
             .filter(|s| !s.is_empty())
             .map(parse_pattern)
+            .map(mark)
             .collect();
         if parts.len() == 1 {
             q.must.push(Atom::Term(parts.into_iter().next().unwrap()));
@@ -255,7 +284,7 @@ fn push_must(q: &mut Query, t: &str) {
             q.must.push(Atom::Or(parts));
         }
     } else {
-        q.must.push(Atom::Term(parse_pattern(t)));
+        q.must.push(Atom::Term(mark(parse_pattern(t))));
     }
 }
 
@@ -289,6 +318,10 @@ fn strip_count_prefix(t: &str) -> Option<&str> {
     strip_prefix_ci(t, "count:").or_else(|| strip_prefix_ci(t, "max:"))
 }
 
+fn strip_content_prefix(t: &str) -> Option<&str> {
+    strip_prefix_ci(t, "content:").or_else(|| strip_prefix_ci(t, "body:"))
+}
+
 fn is_filter(t: &str) -> bool {
     let l = t.to_ascii_lowercase();
     l.starts_with("ext:")
@@ -306,6 +339,8 @@ fn is_filter(t: &str) -> bool {
         || l.starts_with("attrib:")
         || l.starts_with("parent:")
         || l.starts_with("path:")
+        || l.starts_with("content:")
+        || l.starts_with("body:")
         || l.starts_with("sort:")
         || l.starts_with("count:")
         || l.starts_with("max:")
@@ -871,6 +906,43 @@ mod tests {
         let bare = parse_query("parent: path:", now());
         assert!(bare.parent.is_none());
         assert!(bare.path_contains.is_none());
+        assert!(bare.must.is_empty());
+    }
+
+    #[test]
+    fn content_and_body_tokens_are_body_only_terms() {
+        for input in ["content:zzzz", "body:zzzz", "CONTENT:zzzz", "BODY:zzzz"] {
+            let q = parse_query(input, now());
+            assert_eq!(q.must.len(), 1, "{input}");
+            match &q.must[0] {
+                Atom::Term(p) => {
+                    assert_eq!(p.raw, "zzzz", "{input}");
+                    assert!(p.content_only, "{input}");
+                    assert!(q.must[0].content_only(), "{input}");
+                }
+                other => panic!("{input}: expected Term, got {other:?}"),
+            }
+            assert!(!q.name_only, "{input}");
+        }
+
+        let mixed = parse_query("report content:zzzz", now());
+        assert_eq!(mixed.must.len(), 2);
+        match &mixed.must[0] {
+            Atom::Term(p) => {
+                assert_eq!(p.raw, "report");
+                assert!(!p.content_only);
+            }
+            _ => panic!("expected term"),
+        }
+        match &mixed.must[1] {
+            Atom::Term(p) => {
+                assert_eq!(p.raw, "zzzz");
+                assert!(p.content_only);
+            }
+            _ => panic!("expected content term"),
+        }
+
+        let bare = parse_query("content: body:", now());
         assert!(bare.must.is_empty());
     }
 
