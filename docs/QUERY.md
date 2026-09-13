@@ -24,6 +24,12 @@ Flashseek accepts Everything-class operators and Korean natural language. Both c
 - `content:` / `body:` — token matches body only
 - `startwith:` / `endwith:` — basename prefix/suffix (`start:` / `end:` aliases)
 - `datemodified:` / `modified:` — aliases of `dm:`
+- `type:` — alias of `ext:`
+- `pic:` `video:` `audio:` `zip:` `exe:` `doc:` — extension macros
+- `empty:` — size 0
+- `len:` — basename length
+- `depth:` — path components after the drive
+- `root:` — path prefix (vs `path:` contains, `parent:` immediate parent)
 - `attrib:R` / `attrib:H` / `attrib:D` — readonly, hidden, directory (Windows file attributes)
 
 ## Korean
