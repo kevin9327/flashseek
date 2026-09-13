@@ -166,7 +166,7 @@ pub struct Query {
     pub modified_before: Option<SystemTime>,
     /// `n:` / `name:` — atoms may match the basename only, not path or body.
     pub name_only: bool,
-    /// `file:` — exclude directories.
+    /// `file:` / `files:` — exclude directories.
     pub files_only: bool,
     /// `folder:` / `dir:` — exclude files.
     pub folders_only: bool,
@@ -207,7 +207,7 @@ impl Query {
 /// Everything-class operators: space=AND, `|=OR`, `!=NOT`, `*`/`?`,
 /// `ext:`/`type:`, `pic:`/`video:`/`audio:`/`zip:`/`exe:`/`doc:` (set extension lists), `size:`,
 /// `empty:`/`empty:yes` (size == 0), `len:`, `depth:`, `dm:`/`datemodified:`/`modified:`,
-/// `n:`/`name:`, `file:`, `folder:`/`dir:`, `case:`,
+/// `n:`/`name:`, `file:`/`files:`, `folder:`/`dir:`, `case:`,
 /// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`/`S`, `hidden:`/`readonly:`/`system:` (empty rest), `parent:`, `path:`, `root:`,
 /// `content:`/`body:`, `startwith:`/`start:`, `endwith:`/`end:`,
 /// `sort:size`/`sort:date`/`sort:name`, `count:N`/`max:N`, `"quoted phrase"`.
@@ -245,7 +245,7 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
             if !rest.is_empty() {
                 push_must(&mut q, rest);
             }
-        } else if let Some(rest) = strip_prefix_ci(t, "file:") {
+        } else if let Some(rest) = strip_file_prefix(t) {
             q.files_only = true;
             if !rest.is_empty() {
                 push_must(&mut q, rest);
@@ -419,6 +419,10 @@ fn strip_name_prefix(t: &str) -> Option<&str> {
     strip_prefix_ci(t, "name:").or_else(|| strip_prefix_ci(t, "n:"))
 }
 
+fn strip_file_prefix(t: &str) -> Option<&str> {
+    strip_prefix_ci(t, "file:").or_else(|| strip_prefix_ci(t, "files:"))
+}
+
 fn strip_folder_prefix(t: &str) -> Option<&str> {
     strip_prefix_ci(t, "folder:").or_else(|| strip_prefix_ci(t, "dir:"))
 }
@@ -473,6 +477,7 @@ fn is_filter(t: &str) -> bool {
         || l.starts_with("name:")
         || l.starts_with("n:")
         || l.starts_with("file:")
+        || l.starts_with("files:")
         || l.starts_with("folder:")
         || l.starts_with("dir:")
         || l.starts_with("case:")
