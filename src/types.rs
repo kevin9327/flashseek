@@ -1,6 +1,15 @@
 use std::path::PathBuf;
 use std::time::SystemTime;
 
+/// Windows `FILE_ATTRIBUTE_READONLY`.
+pub const ATTR_READONLY: u32 = 0x0000_0001;
+/// Windows `FILE_ATTRIBUTE_HIDDEN`.
+pub const ATTR_HIDDEN: u32 = 0x0000_0002;
+/// Windows `FILE_ATTRIBUTE_SYSTEM`.
+pub const ATTR_SYSTEM: u32 = 0x0000_0004;
+/// Windows `FILE_ATTRIBUTE_DIRECTORY`.
+pub const ATTR_DIRECTORY: u32 = 0x0000_0010;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileRecord {
     pub id: u64,
@@ -10,6 +19,8 @@ pub struct FileRecord {
     pub size: u64,
     pub modified: SystemTime,
     pub is_dir: bool,
+    /// Windows file attributes (`FILE_ATTRIBUTE_*` bits).
+    pub attributes: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

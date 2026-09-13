@@ -78,6 +78,7 @@ mod tests {
                 size: 1,
                 modified,
                 is_dir: false,
+                attributes: 0,
             },
             score: 0.0,
             name_match,

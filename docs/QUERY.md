@@ -17,6 +17,7 @@ Flashseek accepts Everything-class operators and Korean natural language. Both c
 - `case:` — case-sensitive
 - `ww:` / `wholeword:` — whole word (Hangul counts as a word character)
 - `regex:` / `r:` — `.` `*` `.*` `^` `$` on names (std matcher, no extra crate)
+- `attrib:R` / `attrib:H` / `attrib:D` — readonly, hidden, directory (Windows file attributes)
 
 ## Korean
 

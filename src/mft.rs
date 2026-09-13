@@ -66,6 +66,7 @@ mod win {
         name: String,
         is_dir: bool,
         modified: SystemTime,
+        attributes: u32,
     }
 
     #[link(name = "kernel32")]
@@ -114,6 +115,7 @@ mod win {
                 size: 0,
                 modified: node.modified,
                 is_dir: node.is_dir,
+                attributes: node.attributes,
             });
             n += 1;
         }
@@ -299,6 +301,7 @@ mod win {
                 name,
                 is_dir: attrs & FILE_ATTRIBUTE_DIRECTORY != 0,
                 modified: filetime_to_system_time(timestamp),
+                attributes: attrs,
             },
         ))
     }

@@ -147,6 +147,7 @@ mod tests {
             size: 13,
             modified: SystemTime::now(),
             is_dir: false,
+            attributes: 0,
         };
         engine.catalog.insert(rec);
         let hits = engine.query("bodytoken-xyz", SystemTime::now());

@@ -23,4 +23,7 @@ pub use extract::extract_text;
 pub use nl::compile_nl;
 pub use query::{parse_query, Query};
 pub use search::{search, search_text};
-pub use types::{CatalogEvent, FileRecord, Hit, HitJson, Snippet};
+pub use types::{
+    CatalogEvent, FileRecord, Hit, HitJson, Snippet, ATTR_DIRECTORY, ATTR_HIDDEN, ATTR_READONLY,
+    ATTR_SYSTEM,
+};

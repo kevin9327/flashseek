@@ -51,6 +51,7 @@ pub fn fs_change_to_event(
             size: change.size,
             modified: change.modified,
             is_dir: change.is_dir,
+            attributes: 0,
         })),
         FsChangeKind::Delete => existing_id.map(|id| CatalogEvent::Delete { id }),
         FsChangeKind::Rename => {

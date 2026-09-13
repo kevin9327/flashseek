@@ -21,6 +21,7 @@ Windows instant file search. Name catalog is Everything-class (complete tree, li
 | `n:alpha` / `name:alpha` | match basename only |
 | `file:` / `folder:` | files or directories |
 | `case:` / `ww:` | case-sensitive / whole-word |
+| `attrib:R` / `attrib:H` / `attrib:D` | readonly / hidden / directory |
 | `지난주 세금 pdf` | last ~7 days + `ext:pdf` + token `세금` (name **or** body) |
 | `최근` `일주일` `오늘` `어제` `이번달` `올해` | Korean date windows |
 | `문서` `스프레드시트` `슬라이드` `사진` | Korean type words |

@@ -61,6 +61,7 @@ fn walk(
             size,
             modified,
             is_dir,
+            attributes: file_attributes(&meta, is_dir),
         };
         engine.catalog.insert(rec);
         if !is_dir && should_index_content(size, is_extractable(&path), under_any(&path, content_roots))
@@ -74,6 +75,21 @@ fn walk(
         }
     }
     Ok(())
+}
+
+#[cfg(windows)]
+fn file_attributes(meta: &fs::Metadata, _is_dir: bool) -> u32 {
+    use std::os::windows::fs::MetadataExt;
+    meta.file_attributes()
+}
+
+#[cfg(not(windows))]
+fn file_attributes(_meta: &fs::Metadata, is_dir: bool) -> u32 {
+    if is_dir {
+        crate::types::ATTR_DIRECTORY
+    } else {
+        0
+    }
 }
 
 fn under_any(path: &Path, roots: &[PathBuf]) -> bool {

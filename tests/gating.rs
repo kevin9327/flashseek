@@ -240,6 +240,7 @@ fn live_apply_create_delete_rename() {
         size: 3,
         modified: now(),
         is_dir: false,
+        attributes: 0,
     };
     engine.apply(flashseek::CatalogEvent::Create(rec.clone()));
     assert!(

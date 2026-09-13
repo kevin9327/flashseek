@@ -51,6 +51,7 @@ pub fn usn_record_to_event(record: &UsnRecord) -> Option<CatalogEvent> {
             size: record.size,
             modified: record.modified,
             is_dir: record.is_dir,
+            attributes: 0,
         }))
     } else {
         None

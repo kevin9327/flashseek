@@ -215,6 +215,7 @@ mod tests {
                 size: 0,
                 modified: SystemTime::UNIX_EPOCH,
                 is_dir,
+                attributes: 0,
             },
             score: 0.0,
             name_match: true,

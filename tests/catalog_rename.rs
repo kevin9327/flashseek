@@ -15,6 +15,7 @@ fn dir(id: u64, name: &str, path: &str) -> FileRecord {
         size: 0,
         modified: SystemTime::UNIX_EPOCH,
         is_dir: true,
+        attributes: 0,
     }
 }
 
@@ -27,6 +28,7 @@ fn file(id: u64, parent: u64, name: &str, path: &str, modified: SystemTime) -> F
         size: 1,
         modified,
         is_dir: false,
+        attributes: 0,
     }
 }
 
@@ -81,6 +83,7 @@ fn hit(name: &str, modified: SystemTime) -> Hit {
             size: 1,
             modified,
             is_dir: false,
+            attributes: 0,
         },
         score: 0.0,
         name_match: true,

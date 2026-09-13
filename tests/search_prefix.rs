@@ -19,6 +19,7 @@ fn rec(id: u64, name: &str, path: &str) -> FileRecord {
         size: 1,
         modified: now(),
         is_dir: false,
+        attributes: 0,
     }
 }
 

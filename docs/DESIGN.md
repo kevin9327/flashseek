@@ -8,7 +8,7 @@ One library (`flashseek`) drives both `flashseek-cli` and the native `flashseek`
 
 ## Query
 
-`parse_query` implements space=AND, `|=OR`, `!=NOT`, `*`/`?`, `ext:`, `size:`, `dm:`.
+`parse_query` implements space=AND, `|=OR`, `!=NOT`, `*`/`?`, `ext:`, `size:`, `dm:`, `attrib:`.
 `compile_nl` maps Korean (`지난주`, `오늘`, `어제`, `이번달`, `올해`, type words) onto that AST. Structured tokens (`ext:`, `size:`, `dm:`, `|`, `!`) always take the query-language path.
 
 ## Ranking

@@ -106,6 +106,10 @@ pub struct Query {
     pub case_sensitive: bool,
     /// `ww:` / `wholeword:` — match terms only at non-alphanumeric bounds.
     pub whole_word: bool,
+    /// `attrib:RH` — Windows `FILE_ATTRIBUTE_*` bits that must all be set.
+    pub attrib_mask: u32,
+    /// `attrib:R|H` — Windows `FILE_ATTRIBUTE_*` bits of which any may be set.
+    pub attrib_any: u32,
 }
 
 impl Query {
@@ -124,7 +128,7 @@ impl Query {
 
 /// Everything-class operators: space=AND, `|=OR`, `!=NOT`, `*`/`?`,
 /// `ext:`, `size:`, `dm:`, `n:`/`name:`, `file:`, `folder:`, `case:`,
-/// `ww:`/`wholeword:`, `regex:`/`r:`, `"quoted phrase"`.
+/// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`, `"quoted phrase"`.
 pub fn parse_query(input: &str, now: SystemTime) -> Query {
     let tokens = tokenize(input);
     let mut q = Query::default();
@@ -172,6 +176,8 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
             if !rest.is_empty() {
                 q.must.push(Atom::Term(Pattern::regex(rest)));
             }
+        } else if let Some(rest) = strip_prefix_ci(t, "attrib:") {
+            apply_attrib(&mut q, rest);
         } else if t == "|" {
             let next = tokens.get(i + 1).cloned();
             if let (Some(Atom::Term(prev)), Some(n)) = (q.must.pop(), next) {
@@ -250,6 +256,7 @@ fn is_filter(t: &str) -> bool {
         || l.starts_with("case:")
         || l.starts_with("ww:")
         || l.starts_with("wholeword:")
+        || l.starts_with("attrib:")
 }
 
 fn strip_prefix_ci<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
@@ -324,6 +331,31 @@ fn parse_bytes(s: &str) -> Option<u64> {
     };
     let n: f64 = num.trim().parse().ok()?;
     Some((n * mul as f64) as u64)
+}
+
+fn apply_attrib(q: &mut Query, spec: &str) {
+    if spec.contains('|') {
+        for part in spec.split('|') {
+            q.attrib_any |= parse_attrib_letters(part);
+        }
+    } else {
+        q.attrib_mask |= parse_attrib_letters(spec);
+    }
+}
+
+fn parse_attrib_letters(spec: &str) -> u32 {
+    use crate::types::{ATTR_DIRECTORY, ATTR_HIDDEN, ATTR_READONLY, ATTR_SYSTEM};
+    let mut bits = 0u32;
+    for c in spec.chars() {
+        match c.to_ascii_uppercase() {
+            'R' => bits |= ATTR_READONLY,
+            'H' => bits |= ATTR_HIDDEN,
+            'S' => bits |= ATTR_SYSTEM,
+            'D' => bits |= ATTR_DIRECTORY,
+            _ => {}
+        }
+    }
+    bits
 }
 
 fn apply_dm(q: &mut Query, spec: &str, now: SystemTime) {
@@ -710,5 +742,36 @@ mod tests {
         assert!(p.matches("fooZZZbar"));
         assert!(p.matches_with("FooZZZBar", true, false));
         assert!(!p.matches_with("fooZZZbar", true, false));
+    }
+
+    #[test]
+    fn attrib_tokens_set_mask_and_any() {
+        use crate::types::{ATTR_DIRECTORY, ATTR_HIDDEN, ATTR_READONLY};
+
+        let r = parse_query("attrib:R", now());
+        assert_eq!(r.attrib_mask, ATTR_READONLY);
+        assert_eq!(r.attrib_any, 0);
+        assert!(r.must.is_empty());
+
+        let h = parse_query("attrib:H", now());
+        assert_eq!(h.attrib_mask, ATTR_HIDDEN);
+
+        let d = parse_query("attrib:D", now());
+        assert_eq!(d.attrib_mask, ATTR_DIRECTORY);
+
+        let ci = parse_query("ATTRIB:rh", now());
+        assert_eq!(ci.attrib_mask, ATTR_READONLY | ATTR_HIDDEN);
+
+        let both = parse_query("attrib:R attrib:H", now());
+        assert_eq!(both.attrib_mask, ATTR_READONLY | ATTR_HIDDEN);
+        assert_eq!(both.attrib_any, 0);
+
+        let any = parse_query("attrib:R|H", now());
+        assert_eq!(any.attrib_any, ATTR_READONLY | ATTR_HIDDEN);
+        assert_eq!(any.attrib_mask, 0);
+
+        let bare = parse_query("attrib:", now());
+        assert_eq!(bare.attrib_mask, 0);
+        assert_eq!(bare.attrib_any, 0);
     }
 }

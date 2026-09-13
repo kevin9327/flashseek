@@ -45,7 +45,14 @@ fn collect_hits<'a>(
 ) -> Vec<Hit> {
     let mut hits = Vec::new();
     for rec in records {
-        if !filters_ok(rec.path.as_path(), rec.size, rec.modified, rec.is_dir, query) {
+        if !filters_ok(
+            rec.path.as_path(),
+            rec.size,
+            rec.modified,
+            rec.is_dir,
+            rec.attributes,
+            query,
+        ) {
             continue;
         }
         let name = rec.name.as_str();
@@ -136,12 +143,20 @@ fn filters_ok(
     size: u64,
     modified: SystemTime,
     is_dir: bool,
+    attributes: u32,
     query: &Query,
 ) -> bool {
     if query.files_only && is_dir {
         return false;
     }
     if query.folders_only && !is_dir {
+        return false;
+    }
+    let attrs = effective_attributes(attributes, is_dir);
+    if query.attrib_mask != 0 && (attrs & query.attrib_mask) != query.attrib_mask {
+        return false;
+    }
+    if query.attrib_any != 0 && (attrs & query.attrib_any) == 0 {
         return false;
     }
     if !query.extensions.is_empty() {
@@ -170,4 +185,12 @@ fn filters_ok(
         }
     }
     true
+}
+
+fn effective_attributes(attributes: u32, is_dir: bool) -> u32 {
+    if is_dir {
+        attributes | crate::types::ATTR_DIRECTORY
+    } else {
+        attributes
+    }
 }

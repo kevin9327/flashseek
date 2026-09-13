@@ -14,6 +14,7 @@ fn rec(id: u64, name: &str) -> FileRecord {
         size: 1,
         modified: SystemTime::UNIX_EPOCH,
         is_dir: false,
+        attributes: 0,
     }
 }
 
