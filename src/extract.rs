@@ -2,7 +2,9 @@ use std::fs;
 use std::io::{self, Read};
 use std::path::Path;
 
-const EXTRACTABLE: &[&str] = &["txt", "md", "html", "htm", "pdf", "docx", "xlsx", "pptx"];
+const EXTRACTABLE: &[&str] = &[
+    "txt", "md", "html", "htm", "pdf", "docx", "xlsx", "pptx", "csv", "json", "log",
+];
 
 pub fn is_extractable(path: &Path) -> bool {
     ext_of(path)
@@ -19,7 +21,7 @@ pub fn ext_of(path: &Path) -> Option<String> {
 pub fn extract_text(path: &Path) -> io::Result<String> {
     let ext = ext_of(path).unwrap_or_default();
     match ext.as_str() {
-        "txt" | "md" => fs::read_to_string(path),
+        "txt" | "md" | "csv" | "json" | "log" => fs::read_to_string(path),
         "html" | "htm" => Ok(strip_html(&fs::read_to_string(path)?)),
         "pdf" => Ok(extract_pdf(&fs::read(path)?)),
         "docx" => extract_office(path, |n| n == "word/document.xml" || n.ends_with("/document.xml")),
@@ -190,6 +192,13 @@ mod tests {
     #[test]
     fn html_strips_tags() {
         assert!(strip_html("<p>Hello <b>세금</b></p>").contains("세금"));
+    }
+
+    #[test]
+    fn csv_json_log_are_plain_text() {
+        assert!(is_extractable(Path::new("a.csv")));
+        assert!(is_extractable(Path::new("a.json")));
+        assert!(is_extractable(Path::new("a.log")));
     }
 
     #[test]
