@@ -9,6 +9,7 @@ pub mod query;
 pub mod rank;
 pub mod search;
 pub mod types;
+pub mod usn;
 pub mod walk;
 
 #[cfg(feature = "ui")]
