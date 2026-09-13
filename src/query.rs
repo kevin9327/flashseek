@@ -203,7 +203,7 @@ impl Query {
 }
 
 /// Everything-class operators: space=AND, `|=OR`, `!=NOT`, `*`/`?`,
-/// `ext:`, `size:`, `empty:`/`empty:yes` (size == 0), `len:`, `depth:`, `dm:`/`datemodified:`/`modified:`,
+/// `ext:`/`type:`, `size:`, `empty:`/`empty:yes` (size == 0), `len:`, `depth:`, `dm:`/`datemodified:`/`modified:`,
 /// `n:`/`name:`, `file:`, `folder:`, `case:`,
 /// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`, `parent:`, `path:`,
 /// `content:`/`body:`, `startwith:`/`start:`, `endwith:`/`end:`,
@@ -214,7 +214,7 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
     let mut i = 0;
     while i < tokens.len() {
         let t = tokens[i].as_str();
-        if let Some(rest) = strip_prefix_ci(t, "ext:") {
+        if let Some(rest) = strip_ext_prefix(t) {
             q.extensions = rest
                 .split(';')
                 .map(|s| s.trim().trim_start_matches('.').to_ascii_lowercase())
@@ -369,6 +369,10 @@ fn parse_pattern(t: &str) -> Pattern {
     }
 }
 
+fn strip_ext_prefix(t: &str) -> Option<&str> {
+    strip_prefix_ci(t, "ext:").or_else(|| strip_prefix_ci(t, "type:"))
+}
+
 fn strip_name_prefix(t: &str) -> Option<&str> {
     strip_prefix_ci(t, "name:").or_else(|| strip_prefix_ci(t, "n:"))
 }
@@ -406,6 +410,7 @@ fn strip_end_prefix(t: &str) -> Option<&str> {
 fn is_filter(t: &str) -> bool {
     let l = t.to_ascii_lowercase();
     l.starts_with("ext:")
+        || l.starts_with("type:")
         || l.starts_with("size:")
         || l.starts_with("empty:")
         || l.starts_with("len:")
