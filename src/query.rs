@@ -7,6 +7,10 @@ pub struct Pattern {
     pub regex: bool,
     /// `content:` / `body:` — match this pattern against the file body only.
     pub content_only: bool,
+    /// `startwith:` / `start:` — basename prefix instead of substring.
+    pub prefix: bool,
+    /// `endwith:` / `end:` — basename suffix instead of substring.
+    pub suffix: bool,
 }
 
 impl Pattern {
@@ -18,6 +22,8 @@ impl Pattern {
             glob,
             regex: false,
             content_only: false,
+            prefix: false,
+            suffix: false,
         }
     }
 
@@ -27,6 +33,30 @@ impl Pattern {
             glob: false,
             regex: true,
             content_only: false,
+            prefix: false,
+            suffix: false,
+        }
+    }
+
+    pub fn prefix(raw: impl Into<String>) -> Self {
+        Pattern {
+            raw: raw.into(),
+            glob: false,
+            regex: false,
+            content_only: false,
+            prefix: true,
+            suffix: false,
+        }
+    }
+
+    pub fn suffix(raw: impl Into<String>) -> Self {
+        Pattern {
+            raw: raw.into(),
+            glob: false,
+            regex: false,
+            content_only: false,
+            prefix: false,
+            suffix: true,
         }
     }
 
@@ -39,6 +69,10 @@ impl Pattern {
             regex_match(&self.raw, text, case_sensitive)
         } else if self.glob {
             glob_match(&self.raw, text, case_sensitive)
+        } else if self.prefix {
+            affix_match(text, &self.raw, case_sensitive, true)
+        } else if self.suffix {
+            affix_match(text, &self.raw, case_sensitive, false)
         } else {
             contains_match(text, &self.raw, case_sensitive, whole_word)
         }
@@ -75,6 +109,14 @@ impl Atom {
         match self {
             Atom::Term(p) => p.content_only,
             Atom::Or(ps) => !ps.is_empty() && ps.iter().all(|p| p.content_only),
+        }
+    }
+
+    /// `startwith:` / `endwith:` — this atom matches the basename only as prefix/suffix.
+    pub fn basename_affix(&self) -> bool {
+        match self {
+            Atom::Term(p) => p.prefix || p.suffix,
+            Atom::Or(ps) => !ps.is_empty() && ps.iter().all(|p| p.prefix || p.suffix),
         }
     }
 }
@@ -159,7 +201,8 @@ impl Query {
 /// Everything-class operators: space=AND, `|=OR`, `!=NOT`, `*`/`?`,
 /// `ext:`, `size:`, `dm:`/`datemodified:`/`modified:`, `n:`/`name:`, `file:`, `folder:`, `case:`,
 /// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`, `parent:`, `path:`,
-/// `content:`/`body:`, `sort:size`/`sort:date`/`sort:name`, `count:N`/`max:N`, `"quoted phrase"`.
+/// `content:`/`body:`, `startwith:`/`start:`, `endwith:`/`end:`,
+/// `sort:size`/`sort:date`/`sort:name`, `count:N`/`max:N`, `"quoted phrase"`.
 pub fn parse_query(input: &str, now: SystemTime) -> Query {
     let tokens = tokenize(input);
     let mut q = Query::default();
@@ -220,6 +263,14 @@ pub fn parse_query(input: &str, now: SystemTime) -> Query {
         } else if let Some(rest) = strip_content_prefix(t) {
             if !rest.is_empty() {
                 push_must_content(&mut q, rest);
+            }
+        } else if let Some(rest) = strip_start_prefix(t) {
+            if !rest.is_empty() {
+                push_must(&mut q, t);
+            }
+        } else if let Some(rest) = strip_end_prefix(t) {
+            if !rest.is_empty() {
+                push_must(&mut q, t);
             }
         } else if let Some(rest) = strip_prefix_ci(t, "sort:") {
             if let Some(mode) = parse_sort(rest) {
@@ -291,6 +342,10 @@ fn push_must_with(q: &mut Query, t: &str, content_only: bool) {
 fn parse_pattern(t: &str) -> Pattern {
     if let Some(rest) = strip_regex_prefix(t) {
         Pattern::regex(rest)
+    } else if let Some(rest) = strip_start_prefix(t) {
+        Pattern::prefix(rest)
+    } else if let Some(rest) = strip_end_prefix(t) {
+        Pattern::suffix(rest)
     } else {
         Pattern::new(t)
     }
@@ -320,6 +375,14 @@ fn strip_count_prefix(t: &str) -> Option<&str> {
 
 fn strip_content_prefix(t: &str) -> Option<&str> {
     strip_prefix_ci(t, "content:").or_else(|| strip_prefix_ci(t, "body:"))
+}
+
+fn strip_start_prefix(t: &str) -> Option<&str> {
+    strip_prefix_ci(t, "startwith:").or_else(|| strip_prefix_ci(t, "start:"))
+}
+
+fn strip_end_prefix(t: &str) -> Option<&str> {
+    strip_prefix_ci(t, "endwith:").or_else(|| strip_prefix_ci(t, "end:"))
 }
 
 fn is_filter(t: &str) -> bool {
@@ -519,6 +582,27 @@ pub fn contains_ci(hay: &str, needle: &str) -> bool {
         return true;
     }
     hay.to_lowercase().contains(&needle.to_lowercase())
+}
+
+fn affix_match(hay: &str, needle: &str, case_sensitive: bool, prefix: bool) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    if case_sensitive {
+        if prefix {
+            hay.starts_with(needle)
+        } else {
+            hay.ends_with(needle)
+        }
+    } else {
+        let hay = hay.to_lowercase();
+        let needle = needle.to_lowercase();
+        if prefix {
+            hay.starts_with(&needle)
+        } else {
+            hay.ends_with(&needle)
+        }
+    }
 }
 
 fn contains_match(hay: &str, needle: &str, case_sensitive: bool, whole_word: bool) -> bool {
@@ -943,6 +1027,58 @@ mod tests {
         }
 
         let bare = parse_query("content: body:", now());
+        assert!(bare.must.is_empty());
+    }
+
+    #[test]
+    fn startwith_and_endwith_are_basename_affix_terms() {
+        for input in ["startwith:inv", "start:inv", "STARTWITH:inv", "START:inv"] {
+            let q = parse_query(input, now());
+            assert_eq!(q.must.len(), 1, "{input}");
+            match &q.must[0] {
+                Atom::Term(p) => {
+                    assert_eq!(p.raw, "inv", "{input}");
+                    assert!(p.prefix, "{input}");
+                    assert!(!p.suffix, "{input}");
+                    assert!(!p.glob && !p.regex && !p.content_only, "{input}");
+                    assert!(q.must[0].basename_affix(), "{input}");
+                }
+                other => panic!("{input}: expected Term, got {other:?}"),
+            }
+        }
+
+        for input in ["endwith:.bak", "end:.bak", "ENDWITH:bak", "END:bak"] {
+            let q = parse_query(input, now());
+            match &q.must[0] {
+                Atom::Term(p) => {
+                    assert!(p.suffix, "{input}");
+                    assert!(!p.prefix, "{input}");
+                }
+                other => panic!("{input}: expected Term, got {other:?}"),
+            }
+        }
+
+        let p = Pattern::prefix("inv");
+        assert!(p.matches("invoice.txt"));
+        assert!(p.matches("INV.txt"));
+        assert!(!p.matches("x-invoice.txt"));
+        assert!(p.matches_with("INVoice.txt", false, false));
+        assert!(p.matches_with("invoice.txt", true, false));
+        assert!(!p.matches_with("Invoice.txt", true, false));
+
+        let s = Pattern::suffix("bak");
+        assert!(s.matches("foo.bak"));
+        assert!(s.matches("foo.BAK"));
+        assert!(!s.matches("foo.bak.txt"));
+        let sdot = Pattern::suffix(".bak");
+        assert!(sdot.matches("foo.bak"));
+        assert!(!sdot.matches("foobak"));
+
+        let sub = Pattern::new("inv");
+        assert!(sub.matches("invoice.txt"));
+        assert!(sub.matches("x-invoice.txt"), "default stays substring");
+
+        let bare = parse_query("startwith: endwith: start: end:", now());
         assert!(bare.must.is_empty());
     }
 

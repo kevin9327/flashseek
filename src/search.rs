@@ -32,11 +32,15 @@ pub fn search(catalog: &Catalog, content: &ContentIndex, query: &Query, now: Sys
 
 /// Prefix map is name-only and 1–3 chars; using it for path/body queries misses hits.
 fn name_prefix_fast_path(query: &Query) -> Option<&str> {
-    if !query.name_only {
-        return None;
-    }
     match query.must.first() {
-        Some(Atom::Term(p)) if !p.glob && !p.regex && p.raw.chars().count() >= 2 => {
+        Some(Atom::Term(p))
+            if !p.glob
+                && !p.regex
+                && !p.suffix
+                && !p.content_only
+                && p.raw.chars().count() >= 2
+                && (p.prefix || query.name_only) =>
+        {
             Some(p.raw.as_str())
         }
         _ => None,
@@ -67,7 +71,11 @@ fn collect_hits<'a>(
 
         if query.must_not.iter().any(|p| {
             let m = |s: &str| p.matches_with(s, query.case_sensitive, query.whole_word);
-            m(name) || m(&path) || body.map(m).unwrap_or(false)
+            if p.prefix || p.suffix {
+                m(name)
+            } else {
+                m(name) || m(&path) || body.map(m).unwrap_or(false)
+            }
         }) {
             continue;
         }
@@ -141,8 +149,8 @@ fn atom_match(
         return (false, false, c);
     }
     let n = atom.matches_text_with(name, cs, ww);
-    if query.name_only {
-        // Path and body must not satisfy the atom when `n:` / `name:` is set.
+    if atom.basename_affix() || query.name_only {
+        // Path and body must not satisfy `startwith:` / `endwith:` or `n:` / `name:`.
         return (n, false, false);
     }
     (
