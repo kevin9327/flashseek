@@ -164,7 +164,7 @@ pub struct Query {
     pub depth: Option<SizeFilter>,
     pub modified_after: Option<SystemTime>,
     pub modified_before: Option<SystemTime>,
-    /// `n:` / `name:` — atoms may match the basename only, not path or body.
+    /// `n:` / `name:` / `filename:` — atoms may match the basename only, not path or body.
     pub name_only: bool,
     /// `file:` / `files:` — exclude directories.
     pub files_only: bool,
@@ -207,7 +207,7 @@ impl Query {
 /// Everything-class operators: space=AND, `|=OR`, `!=NOT`, `*`/`?`,
 /// `ext:`/`type:`, `pic:`/`video:`/`audio:`/`zip:`/`exe:`/`doc:` (set extension lists), `size:`,
 /// `empty:`/`empty:yes` (size == 0), `len:`, `depth:`, `dm:`/`datemodified:`/`modified:`,
-/// `n:`/`name:`, `file:`/`files:`, `folder:`/`dir:`, `case:`,
+/// `n:`/`name:`/`filename:`, `file:`/`files:`, `folder:`/`dir:`, `case:`,
 /// `ww:`/`wholeword:`, `regex:`/`r:`, `attrib:R`/`H`/`D`/`S`, `hidden:`/`readonly:`/`system:` (empty rest), `parent:`, `path:`, `root:`,
 /// `content:`/`body:`, `startwith:`/`start:`, `endwith:`/`end:`,
 /// `sort:size`/`sort:date`/`sort:name`, `count:N`/`max:N`, `"quoted phrase"`.
@@ -416,7 +416,9 @@ fn parse_ext_list(rest: &str) -> Vec<String> {
 }
 
 fn strip_name_prefix(t: &str) -> Option<&str> {
-    strip_prefix_ci(t, "name:").or_else(|| strip_prefix_ci(t, "n:"))
+    strip_prefix_ci(t, "filename:")
+        .or_else(|| strip_prefix_ci(t, "name:"))
+        .or_else(|| strip_prefix_ci(t, "n:"))
 }
 
 fn strip_file_prefix(t: &str) -> Option<&str> {
@@ -474,6 +476,7 @@ fn is_filter(t: &str) -> bool {
         || l.starts_with("datemodified:")
         || l.starts_with("modified:")
         || l.starts_with("dm:")
+        || l.starts_with("filename:")
         || l.starts_with("name:")
         || l.starts_with("n:")
         || l.starts_with("file:")
